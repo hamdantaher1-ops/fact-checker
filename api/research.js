@@ -45,7 +45,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const prompt = `You are a consumer-protection research analyst. Below is the caption text from an Instagram post advertising a product or service.
+  const prompt = `You are a consumer product research analyst. Below is the caption text from an Instagram post advertising a product or service.
 
 CAPTION:
 """
@@ -53,18 +53,21 @@ ${caption.trim()}
 """
 
 1. Identify the specific product, brand, or service being promoted.
-2. Search the web for independent reviews, customer complaints, scam/fraud reports, chargeback or refund horror stories, and any relevant news coverage. Prioritize sources that are not the brand's own marketing.
-3. Weigh what you find and reach a verdict.
+2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality.
+4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Respond with ONLY a single JSON object, no markdown fences, no commentary before or after, matching exactly this shape:
 {
   "product_name": string,
-  "verdict": "good to buy" | "not recommended" | "likely scam",
-  "risk_score": number between 0 and 10 (0 = very safe, 10 = almost certainly a scam),
-  "summary": string, 2-4 sentences explaining the reasoning in plain language,
+  "verdict_label": "Great Buy" | "Decent" | "Skip It" | "Avoid",
+  "worth_it_score": number between 0 and 10 (10 = excellent purchase, highly recommended; 0 = terrible, avoid entirely),
+  "summary": string, 2-4 sentences explaining the reasoning in plain language \u2014 cover both quality/value and any trust concerns,
+  "alternatives": [ { "name": string, "reason": string } ],
   "sources": [ { "title": string, "url": string, "note": string } ]
 }
-Include at least 3 sources when you can find them. "note" should say in a few words what each source shows (e.g. "BBB complaint about non-delivery").`;
+For "alternatives": include 0 to 3 named competing products or brands, ONLY when independent research clearly suggests they're a better value or better reviewed \u2014 leave the array empty if nothing clearly stands out. Don't force a comparison that isn't supported.
+Include at least 3 sources when you can find them. "note" should say in a few words what each source shows (e.g. "4.8-star average across 2,000 reviews" or "multiple complaints about shipping delays").`;
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {

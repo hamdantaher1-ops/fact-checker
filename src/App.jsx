@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from "react";
-import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Link2, Loader2, ChevronRight, ExternalLink, Info, Stamp } from "lucide-react";
+import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Info, Stamp } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Design tokens (see plan): case-file / dossier aesthetic.
@@ -12,11 +12,13 @@ const PAPER_LINE = "#D9D4C6";
 const RUST = "#A8431F";
 const GREEN = "#2F6B4F";
 const AMBER = "#B27A16";
+const SLATE = "#6B6459";
 
 const VERDICTS = {
-  "good to buy": { color: GREEN, label: "CLEARED", Icon: ShieldCheck, rotate: "-6deg" },
-  "not recommended": { color: AMBER, label: "CAUTION", Icon: ShieldAlert, rotate: "4deg" },
-  "likely scam": { color: RUST, label: "FLAGGED", Icon: ShieldX, rotate: "-3deg" },
+  "Great Buy": { color: GREEN, label: "APPROVED", Icon: ShieldCheck, rotate: "-6deg" },
+  "Decent": { color: AMBER, label: "MIXED", Icon: ShieldAlert, rotate: "3deg" },
+  "Skip It": { color: SLATE, label: "PASS", Icon: Ban, rotate: "-4deg" },
+  "Avoid": { color: RUST, label: "AVOID", Icon: ShieldX, rotate: "5deg" },
 };
 
 function extractShortcode(url) {
@@ -154,7 +156,7 @@ export default function FactChecker() {
     }
   }
 
-  const verdictMeta = research?.verdict ? VERDICTS[research.verdict] : null;
+  const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
 
   return (
     <div style={{ background: PAPER, color: INK, minHeight: "100%", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }} className="w-full">
@@ -273,8 +275,32 @@ export default function FactChecker() {
                   <p className="text-xs leading-relaxed opacity-70">
                     Meta's oEmbed response doesn't include caption text for this post (common — Instagram stopped
                     reliably returning it, and the rendered embed above lives in a cross-origin frame this app can't
-                    read). Paste the caption yourself so the research step has something to work with.
+                    read). Open the post to copy the caption, then paste it here.
                   </p>
+                  <div className="flex items-center gap-3">
+                    
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs font-medium hover:underline flex items-center gap-1"
+                      style={{ color: INK }}
+                    >
+                      Open post on Instagram <ExternalLink size={12} />
+                    </a>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const text = await navigator.clipboard.readText();
+                          if (text) setManualCaption(text);
+                        } catch {
+                          setFetchError("Couldn't read the clipboard — paste into the box manually instead.");
+                        }
+                      }}
+                      className="text-xs font-medium hover:underline opacity-70 hover:opacity-100"
+                    >
+                      Paste from clipboard
+                    </button>
+                  </div>
                   <textarea
                     value={manualCaption}
                     onChange={(e) => setManualCaption(e.target.value)}
@@ -333,7 +359,7 @@ export default function FactChecker() {
                 >
                   <verdictMeta.Icon size={22} className="mx-auto mb-1" />
                   <div className="text-lg font-bold tracking-wider leading-none">{verdictMeta.label}</div>
-                  <div className="text-[10px] mt-1 tracking-wide">{research.verdict.toUpperCase()}</div>
+                  <div className="text-[10px] mt-1 tracking-wide">{research.verdict_label.toUpperCase()}</div>
                 </div>
 
                 <div className="space-y-4">
@@ -344,9 +370,9 @@ export default function FactChecker() {
 
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
-                      Risk score — {research.risk_score}/10
+                      Worth-it score — {research.worth_it_score}/10
                     </p>
-                    <RiskBar score={research.risk_score} color={verdictMeta.color} />
+                    <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
                   </div>
 
                   <div>
@@ -357,6 +383,20 @@ export default function FactChecker() {
               </div>
             )}
 
+            {research?.alternatives?.length > 0 && (
+              <div className="mt-8">
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Worth comparing to</p>
+                <ul className="space-y-3">
+                  {research.alternatives.map((alt, i) => (
+                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
+                      <p className="text-sm font-medium">{alt.name}</p>
+                      {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {research?.sources?.length > 0 && (
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Sources consulted</p>
@@ -364,7 +404,7 @@ export default function FactChecker() {
                   {research.sources.map((s, i) => (
                     <li key={i} className="py-3 flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <a
+                        
                           href={s.url}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -410,7 +450,7 @@ function SectionLabel({ index, title }) {
   );
 }
 
-function RiskBar({ score, color }) {
+function WorthBar({ score, color }) {
   const pct = Math.max(0, Math.min(10, score)) * 10;
   return (
     <div className="h-2 w-full bg-white border" style={{ borderColor: PAPER_LINE }}>
