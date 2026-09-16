@@ -127,54 +127,25 @@ export default function FactChecker() {
     setResearchError("");
     setResearch(null);
 
-    const prompt = `You are a consumer-protection research analyst. Below is the caption text from an Instagram post advertising a product or service.
-
-CAPTION:
-"""
-${caption.trim()}
-"""
-
-1. Identify the specific product, brand, or service being promoted.
-2. Search the web for independent reviews, customer complaints, scam/fraud reports, chargeback or refund horror stories, and any relevant news coverage. Prioritize sources that are not the brand's own marketing.
-3. Weigh what you find and reach a verdict.
-
-Respond with ONLY a single JSON object, no markdown fences, no commentary before or after, matching exactly this shape:
-{
-  "product_name": string,
-  "verdict": "good to buy" | "not recommended" | "likely scam",
-  "risk_score": number between 0 and 10 (0 = very safe, 10 = almost certainly a scam),
-  "summary": string, 2-4 sentences explaining the reasoning in plain language,
-  "sources": [ { "title": string, "url": string, "note": string } ]
-}
-Include at least 3 sources when you can find them. "note" should say in a few words what each source shows (e.g. "BBB complaint about non-delivery").`;
-
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-        }),
+        body: JSON.stringify({ caption: caption.trim() }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.error?.message || "Research request failed.");
-
-      const textBlocks = (data.content || []).filter((b) => b.type === "text").map((b) => b.text);
-      const joined = textBlocks.join("\n").trim();
-      if (!joined) throw new Error("No answer came back — try again.");
-
-      let parsed;
+      const raw = await response.text();
+      let data;
       try {
-        parsed = JSON.parse(stripFences(joined));
+        data = JSON.parse(raw);
       } catch {
-        const match = joined.match(/\{[\s\S]*\}/);
-        if (!match) throw new Error("Couldn't parse the findings into a report.");
-        parsed = JSON.parse(match[0]);
+        throw new Error(
+          "The research proxy didn't return JSON — likely it isn't deployed yet, or ANTHROPIC_API_KEY isn't set on the server."
+        );
       }
-      setResearch(parsed);
+      if (!response.ok) {
+        throw new Error(data?.error || `Proxy returned ${response.status}`);
+      }
+      setResearch(data);
       setResearchState("done");
     } catch (err) {
       setResearchState("error");
