@@ -404,7 +404,7 @@ export default function FactChecker() {
                   {research.sources.map((s, i) => (
                     <li key={i} className="py-3 flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        
+                        <a
                           href={s.url}
                           target="_blank"
                           rel="noopener noreferrer"
