@@ -56,7 +56,8 @@ export default function FactChecker() {
 
   const embedContainerRef = useRef(null);
 
-  const caption = (oembed?.title && oembed.title.trim()) || manualCaption;
+  const autoCaption = (oembed?.description && oembed.description.trim()) || (oembed?.title && oembed.title.trim()) || "";
+  const caption = autoCaption || manualCaption;
 
   const loadEmbedScript = useCallback(() => {
     if (window.instgrm) {
@@ -263,9 +264,9 @@ export default function FactChecker() {
 
             <div className="mt-4">
               <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Caption used for research</p>
-              {oembed.title && oembed.title.trim() ? (
+              {autoCaption ? (
                 <p className="text-sm leading-relaxed p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                  {oembed.title}
+                  {autoCaption}
                 </p>
               ) : (
                 <div className="space-y-2">

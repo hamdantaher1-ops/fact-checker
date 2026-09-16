@@ -11,6 +11,60 @@
 // raise your rate limit from 1,000/hr (tokenless) to 5M/day. Only needed
 // once you're past the tokenless limit and have App Review approval.
 
+function decodeHtmlEntities(str) {
+  return str
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(parseInt(n, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;|&apos;/g, "'");
+}
+
+function extractMetaContent(html, property) {
+  const patterns = [
+    new RegExp(`<meta[^>]*property=["']${property}["'][^>]*content=["']([^"']*)["']`, "i"),
+    new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*property=["']${property}["']`, "i"),
+  ];
+  for (const re of patterns) {
+    const match = html.match(re);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Instagram's og:description is usually wrapped like:
+// "1,234 Likes, 56 Comments - username on Instagram: "the actual caption""
+// Pull just the quoted part out when that wrapper is present.
+function parseCaption(rawDescription) {
+  const wrapped = rawDescription.match(/:\s*"([\s\S]*)"\s*$/);
+  return wrapped ? wrapped[1] : rawDescription;
+}
+
+async function fetchCaption(postUrl) {
+  try {
+    const pageRes = await fetch(postUrl, {
+      headers: {
+        // Identify honestly as a link-preview crawler — the same identity
+        // Meta explicitly supports for generating link previews (Slack,
+        // iMessage, Facebook itself all use this), rather than spoofing a
+        // real browser.
+        "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+      },
+    });
+    if (!pageRes.ok) return null;
+    const html = await pageRes.text();
+    const raw = extractMetaContent(html, "og:description");
+    if (!raw) return null;
+    const decoded = decodeHtmlEntities(raw);
+    const caption = parseCaption(decoded).trim();
+    return caption || null;
+  } catch {
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   // Allow the frontend (same origin in production, any origin while you're
   // testing locally or from a Claude artifact preview) to call this.
@@ -57,7 +111,13 @@ export default async function handler(req, res) {
   try {
     const metaRes = await fetch(endpoint);
     const data = await metaRes.json();
-    res.status(metaRes.status).json(data);
+    if (!metaRes.ok) {
+      res.status(metaRes.status).json(data);
+      return;
+    }
+    const caption = await fetchCaption(url);
+    if (caption) data.description = caption;
+    res.status(200).json(data);
   } catch (err) {
     res.status(502).json({ error: "Couldn't reach Meta's oEmbed endpoint.", detail: err?.message });
   }
