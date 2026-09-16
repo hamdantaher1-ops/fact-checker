@@ -278,7 +278,7 @@ export default function FactChecker() {
                     read). Open the post to copy the caption, then paste it here.
                   </p>
                   <div className="flex items-center gap-3">
-                    
+                    <a
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
