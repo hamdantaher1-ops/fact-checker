@@ -166,7 +166,7 @@ export default function FactChecker() {
         <div className="max-w-3xl mx-auto px-6 py-7 flex items-baseline justify-between">
           <div>
             <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-3xl font-bold tracking-tight">
-              Fact Checker
+              Fat Checker
             </h1>
             <p className="text-xs mt-1 opacity-70">A dossier for every product someone tagged you in.</p>
           </div>
