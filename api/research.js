@@ -19,6 +19,52 @@ function stripFences(text) {
     .trim();
 }
 
+const VERDICT_TOOL = {
+  name: "submit_verdict",
+  description: "Submit the final structured purchase verdict once research is complete. Call this exactly once, as your last action.",
+  input_schema: {
+    type: "object",
+    properties: {
+      product_name: { type: "string", description: "The specific product, brand, or service identified." },
+      verdict_label: { type: "string", enum: ["Great Buy", "Decent", "Skip It", "Avoid"] },
+      worth_it_score: {
+        type: "number",
+        description: "0 to 10. 10 = excellent purchase, highly recommended. 0 = terrible, avoid entirely.",
+      },
+      summary: {
+        type: "string",
+        description: "2-4 sentences explaining the reasoning in plain language, covering both quality/value and any trust concerns.",
+      },
+      alternatives: {
+        type: "array",
+        description: "0 to 3 named competing products/brands, ONLY when independent research clearly suggests they're a better value or better reviewed. Leave empty if nothing clearly stands out.",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            reason: { type: "string" },
+          },
+          required: ["name", "reason"],
+        },
+      },
+      sources: {
+        type: "array",
+        description: "At least 3 sources when available.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            url: { type: "string" },
+            note: { type: "string", description: "A few words on what this source shows, e.g. '4.8-star average across 2,000 reviews'." },
+          },
+          required: ["title", "url", "note"],
+        },
+      },
+    },
+    required: ["product_name", "verdict_label", "worth_it_score", "summary", "alternatives", "sources"],
+  },
+};
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -57,17 +103,7 @@ ${caption.trim()}
 3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
-Respond with ONLY a single JSON object, no markdown fences, no commentary before or after, matching exactly this shape:
-{
-  "product_name": string,
-  "verdict_label": "Great Buy" | "Decent" | "Skip It" | "Avoid",
-  "worth_it_score": number between 0 and 10 (10 = excellent purchase, highly recommended; 0 = terrible, avoid entirely),
-  "summary": string, 2-4 sentences explaining the reasoning in plain language \u2014 cover both quality/value and any trust concerns,
-  "alternatives": [ { "name": string, "reason": string } ],
-  "sources": [ { "title": string, "url": string, "note": string } ]
-}
-For "alternatives": include 0 to 3 named competing products or brands, ONLY when independent research clearly suggests they're a better value or better reviewed \u2014 leave the array empty if nothing clearly stands out. Don't force a comparison that isn't supported.
-Include at least 3 sources when you can find them. "note" should say in a few words what each source shows (e.g. "4.8-star average across 2,000 reviews" or "multiple complaints about shipping delays").`;
+Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -79,9 +115,9 @@ Include at least 3 sources when you can find them. "note" should say in a few wo
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 1000,
+        max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        tools: [{ type: "web_search_20250305", name: "web_search" }, VERDICT_TOOL],
       }),
     });
     const data = await anthropicRes.json();
@@ -90,26 +126,35 @@ Include at least 3 sources when you can find them. "note" should say in a few wo
       return;
     }
 
-    const textBlocks = (data.content || []).filter((b) => b.type === "text").map((b) => b.text);
-    const joined = textBlocks.join("\n").trim();
-    if (!joined) {
-      res.status(502).json({ error: "No answer came back from the model." });
+    const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === "submit_verdict");
+    if (toolUse) {
+      res.status(200).json(toolUse.input);
       return;
     }
 
-    let parsed;
+    // Fallback for the rare case the model answered in plain text instead of
+    // calling the tool — try to recover a JSON object from it.
+    const textBlocks = (data.content || []).filter((b) => b.type === "text").map((b) => b.text);
+    const joined = textBlocks.join("\n").trim();
+    if (!joined) {
+      res.status(502).json({ error: "The model didn't submit a verdict. Try again." });
+      return;
+    }
     try {
-      parsed = JSON.parse(stripFences(joined));
+      res.status(200).json(JSON.parse(stripFences(joined)));
+      return;
     } catch {
       const match = joined.match(/\{[\s\S]*\}/);
-      if (!match) {
-        res.status(502).json({ error: "Couldn't parse the findings into a report." });
-        return;
+      if (match) {
+        try {
+          res.status(200).json(JSON.parse(match[0]));
+          return;
+        } catch {
+          // fall through to the error below
+        }
       }
-      parsed = JSON.parse(match[0]);
+      res.status(502).json({ error: "Couldn't parse the findings into a report. Try again." });
     }
-
-    res.status(200).json(parsed);
   } catch (err) {
     res.status(502).json({ error: err?.message || "Research request failed." });
   }
