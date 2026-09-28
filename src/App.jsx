@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState } from "react";
 import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Info, Stamp } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -39,97 +39,47 @@ function stripFences(text) {
     .trim();
 }
 
+// Stages the whole flow moves through. Only one thing renders below the
+// link input at a time, driven off this.
+// idle -> fetching -> (need-caption -> researching) | researching -> done
+//                   \-> error (from any step)
 export default function FactChecker() {
   const [url, setUrl] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("/api/oembed");
   const [showTokenHelp, setShowTokenHelp] = useState(false);
 
-  const [oembed, setOembed] = useState(null);
-  const [fetchState, setFetchState] = useState("idle"); // idle | loading | error | done
-  const [fetchError, setFetchError] = useState("");
-
+  const [stage, setStage] = useState("idle"); // idle | fetching | need-caption | researching | done | error
+  const [errorMessage, setErrorMessage] = useState("");
   const [manualCaption, setManualCaption] = useState("");
-  const [captionLocked, setCaptionLocked] = useState(false);
-
   const [research, setResearch] = useState(null);
-  const [researchState, setResearchState] = useState("idle"); // idle | loading | error | done
-  const [researchError, setResearchError] = useState("");
 
-  const embedContainerRef = useRef(null);
+  const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
 
-  const autoCaption = (oembed?.description && oembed.description.trim()) || (oembed?.title && oembed.title.trim()) || "";
-  const caption = autoCaption || manualCaption;
-
-  const loadEmbedScript = useCallback(() => {
-    if (window.instgrm) {
-      window.instgrm.Embeds.process();
-      return;
+  async function fetchCaption(postUrl) {
+    let endpoint = `${proxyUrl}?url=${encodeURIComponent(postUrl)}`;
+    if (accessToken.trim()) {
+      endpoint += `&access_token=${encodeURIComponent(accessToken.trim())}`;
     }
-    const existing = document.getElementById("ig-embed-script");
-    if (existing) return;
-    const script = document.createElement("script");
-    script.id = "ig-embed-script";
-    script.src = "https://www.instagram.com/embed.js";
-    script.async = true;
-    script.onload = () => window.instgrm && window.instgrm.Embeds.process();
-    document.body.appendChild(script);
-  }, []);
-
-  async function handleFetchPost() {
-    setFetchError("");
-    setOembed(null);
-    setResearch(null);
-    setResearchState("idle");
-    setManualCaption("");
-    setCaptionLocked(false);
-
-    const clean = extractShortcode(url);
-    if (!clean) {
-      setFetchState("error");
-      setFetchError("That doesn't look like an instagram.com link. Paste the full post URL.");
-      return;
-    }
-
-    setFetchState("loading");
+    const res = await fetch(endpoint);
+    const raw = await res.text();
+    let data;
     try {
-      let endpoint = `${proxyUrl}?url=${encodeURIComponent(clean)}`;
-      if (accessToken.trim()) {
-        endpoint += `&access_token=${encodeURIComponent(accessToken.trim())}`;
-      }
-      const res = await fetch(endpoint);
-      const raw = await res.text();
-      let data;
-      try {
-        data = JSON.parse(raw);
-      } catch {
-        throw new Error(
-          "The proxy didn't return JSON — likely it isn't running yet (e.g. you're on a plain `npm run dev` " +
-            "server, which doesn't execute /api functions). Deploy to Vercel, or run `vercel dev` locally, to test this."
-        );
-      }
-      if (!res.ok) {
-        throw new Error(data?.error || data?.error?.message || `Proxy returned ${res.status}`);
-      }
-      setOembed(data);
-      setFetchState("done");
-      setTimeout(loadEmbedScript, 50);
-    } catch (err) {
-      setFetchState("error");
-      setFetchError(
-        err.message?.includes("Failed to fetch")
-          ? "Couldn't reach the proxy — check the proxy endpoint below is correct and deployed."
-          : err.message || "Couldn't fetch that post."
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(
+        "The post-lookup proxy didn't return JSON — likely it isn't running yet (e.g. you're on a plain `npm run dev` " +
+          "server, which doesn't execute /api functions). Deploy to Vercel, or run `vercel dev` locally, to test this."
       );
     }
+    if (!res.ok) {
+      throw new Error(data?.error || data?.error?.message || `Proxy returned ${res.status}`);
+    }
+    return (data.description && data.description.trim()) || (data.title && data.title.trim()) || "";
   }
 
-  async function handleRunResearch() {
-    if (!caption.trim()) return;
-    setResearchState("loading");
-    setResearchError("");
-    setResearch(null);
-
+  async function runResearch(caption) {
+    setStage("researching");
     try {
       const response = await fetch("/api/research", {
         method: "POST",
@@ -148,15 +98,54 @@ export default function FactChecker() {
       if (!response.ok) {
         throw new Error(data?.error || `Proxy returned ${response.status}`);
       }
-      setResearch(data);
-      setResearchState("done");
+      let parsed = data;
+      if (typeof data === "string") {
+        parsed = JSON.parse(stripFences(data));
+      }
+      setResearch(parsed);
+      setStage("done");
     } catch (err) {
-      setResearchState("error");
-      setResearchError(err.message || "Something went wrong while researching.");
+      setStage("error");
+      setErrorMessage(err.message || "Something went wrong while researching.");
     }
   }
 
-  const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
+  async function handleRun() {
+    setErrorMessage("");
+    setResearch(null);
+    setManualCaption("");
+
+    const clean = extractShortcode(url);
+    if (!clean) {
+      setStage("error");
+      setErrorMessage("That doesn't look like an instagram.com link. Paste the full post URL.");
+      return;
+    }
+
+    setStage("fetching");
+    try {
+      const caption = await fetchCaption(clean);
+      if (caption) {
+        await runResearch(caption);
+      } else {
+        setStage("need-caption");
+      }
+    } catch (err) {
+      setStage("error");
+      setErrorMessage(
+        err.message?.includes("Failed to fetch")
+          ? "Couldn't reach the proxy — check the proxy endpoint below is correct and deployed."
+          : err.message || "Couldn't fetch that post."
+      );
+    }
+  }
+
+  function handleManualContinue() {
+    if (!manualCaption.trim()) return;
+    runResearch(manualCaption.trim());
+  }
+
+  const busy = stage === "fetching" || stage === "researching";
 
   return (
     <div style={{ background: PAPER, color: INK, minHeight: "100%", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }} className="w-full">
@@ -189,17 +178,29 @@ export default function FactChecker() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   placeholder="https://www.instagram.com/p/..."
-                  className="w-full bg-transparent outline-none px-2 py-2.5 text-sm"
+                  disabled={busy}
+                  className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
                 />
               </div>
               <button
-                onClick={handleFetchPost}
-                disabled={fetchState === "loading"}
-                className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60"
+                onClick={handleRun}
+                disabled={busy || !url.trim()}
+                className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0"
                 style={{ background: INK }}
               >
-                {fetchState === "loading" ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
-                Fetch
+                {stage === "fetching" ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Fetching…
+                  </>
+                ) : stage === "researching" ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Researching…
+                  </>
+                ) : (
+                  <>
+                    <Search size={16} /> Run the research
+                  </>
+                )}
               </button>
             </div>
 
@@ -221,11 +222,11 @@ export default function FactChecker() {
                   />
                 </div>
                 <p className="text-xs leading-relaxed opacity-70">
-                  This app calls a small server-side proxy instead of Meta directly — browsers can't call
-                  graph.facebook.com themselves (Meta doesn't allow cross-origin reads there). The default{" "}
-                  <code>/api/oembed</code> works once this app is deployed alongside the included proxy function. It
-                  won't resolve in this chat preview, since there's no backend running here — deploy first, then test
-                  live. Point this field at a full URL if your proxy lives on a different domain.
+                  This app looks up the post through a small server-side proxy instead of Meta directly — browsers
+                  can't call graph.facebook.com themselves. The default <code>/api/oembed</code> works once this app
+                  is deployed alongside the included proxy function. It won't resolve in this chat preview, since
+                  there's no backend running here — deploy first, then test live. Point this field at a full URL if
+                  your proxy lives on a different domain.
                 </p>
                 <div className="flex items-center border px-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
                   <input
@@ -237,151 +238,112 @@ export default function FactChecker() {
                   />
                 </div>
                 <p className="text-xs leading-relaxed opacity-70">
-                  Not required — public posts fetch tokenless through the proxy, capped at 1,000 requests/hour. Set{" "}
+                  Not required — public posts look up tokenless through the proxy, capped at 1,000 requests/hour. Set{" "}
                   <code>META_ACCESS_TOKEN</code> as an environment variable on your proxy for a shared 5M/day ceiling
                   instead of typing one here per user.
                 </p>
               </div>
             )}
 
-            {fetchState === "error" && (
+            {stage === "error" && (
               <p className="text-sm" style={{ color: RUST }}>
-                {fetchError}
+                {errorMessage}
               </p>
             )}
           </div>
         </section>
 
-        {/* Exhibit B: the post itself */}
-        {oembed && (
+        {/* Exhibit B: fallback when the caption couldn't be auto-read */}
+        {stage === "need-caption" && (
           <section>
-            <SectionLabel index="B" title="The Post" />
-            <div className="mt-4 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-              <div
-                ref={embedContainerRef}
-                className="p-4 flex justify-center [&_iframe]:!max-w-full"
-                dangerouslySetInnerHTML={{ __html: oembed.html }}
+            <SectionLabel index="B" title="One More Thing" />
+            <div className="mt-4 space-y-3">
+              <p className="text-sm leading-relaxed">
+                This post's caption couldn't be read automatically (common on some posts — Instagram doesn't always
+                expose it to an automated lookup). Open the post, copy the caption, and paste it here to continue.
+              </p>
+              <div className="flex items-center gap-3">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-medium hover:underline flex items-center gap-1"
+                  style={{ color: INK }}
+                >
+                  Open post on Instagram <ExternalLink size={12} />
+                </a>
+                <button
+                  onClick={async () => {
+                    try {
+                      const text = await navigator.clipboard.readText();
+                      if (text) setManualCaption(text);
+                    } catch {
+                      setErrorMessage("Couldn't read the clipboard — paste into the box manually instead.");
+                    }
+                  }}
+                  className="text-xs font-medium hover:underline opacity-70 hover:opacity-100"
+                >
+                  Paste from clipboard
+                </button>
+              </div>
+              <textarea
+                value={manualCaption}
+                onChange={(e) => setManualCaption(e.target.value)}
+                rows={4}
+                placeholder="Paste the post's caption here…"
+                className="w-full text-sm p-3 border outline-none"
+                style={{ borderColor: INK, background: "#fff" }}
               />
-            </div>
-
-            <div className="mt-4">
-              <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Caption used for research</p>
-              {autoCaption ? (
-                <p className="text-sm leading-relaxed p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                  {autoCaption}
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs leading-relaxed opacity-70">
-                    Meta's oEmbed response doesn't include caption text for this post (common — Instagram stopped
-                    reliably returning it, and the rendered embed above lives in a cross-origin frame this app can't
-                    read). Open the post to copy the caption, then paste it here.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium hover:underline flex items-center gap-1"
-                      style={{ color: INK }}
-                    >
-                      Open post on Instagram <ExternalLink size={12} />
-                    </a>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const text = await navigator.clipboard.readText();
-                          if (text) setManualCaption(text);
-                        } catch {
-                          setFetchError("Couldn't read the clipboard — paste into the box manually instead.");
-                        }
-                      }}
-                      className="text-xs font-medium hover:underline opacity-70 hover:opacity-100"
-                    >
-                      Paste from clipboard
-                    </button>
-                  </div>
-                  <textarea
-                    value={manualCaption}
-                    onChange={(e) => setManualCaption(e.target.value)}
-                    disabled={captionLocked}
-                    rows={4}
-                    placeholder="Paste the post's caption here…"
-                    className="w-full text-sm p-3 border outline-none disabled:opacity-60"
-                    style={{ borderColor: INK, background: "#fff" }}
-                  />
-                </div>
-              )}
+              <button
+                onClick={handleManualContinue}
+                disabled={!manualCaption.trim()}
+                className="px-4 py-2.5 text-sm font-medium text-white flex items-center gap-2 disabled:opacity-50"
+                style={{ background: INK }}
+              >
+                Continue with this caption <ChevronRight size={16} />
+              </button>
             </div>
           </section>
         )}
 
-        {/* Exhibit C: research + verdict */}
-        {oembed && (
+        {/* Exhibit C: findings */}
+        {stage === "done" && research && verdictMeta && (
           <section>
-            <SectionLabel index="C" title="The Findings" />
-            <div className="mt-4">
-              <button
-                onClick={handleRunResearch}
-                disabled={!caption.trim() || researchState === "loading"}
-                className="px-4 py-2.5 text-sm font-medium text-white flex items-center gap-2 disabled:opacity-50"
-                style={{ background: INK }}
-              >
-                {researchState === "loading" ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> Researching…
-                  </>
-                ) : (
-                  <>
-                    Run the research <ChevronRight size={16} />
-                  </>
-                )}
-              </button>
-              {!caption.trim() && (
-                <p className="text-xs mt-2 opacity-60">Add a caption above first — that's what gets researched.</p>
-              )}
-              {researchState === "error" && (
-                <p className="text-sm mt-2" style={{ color: RUST }}>
-                  {researchError}
-                </p>
-              )}
-            </div>
+            <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
 
-            {research && verdictMeta && (
-              <div className="mt-8 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <div
-                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
-                  style={{
-                    borderColor: verdictMeta.color,
-                    color: verdictMeta.color,
-                    transform: `rotate(${verdictMeta.rotate})`,
-                  }}
-                >
-                  <verdictMeta.Icon size={22} className="mx-auto mb-1" />
-                  <div className="text-lg font-bold tracking-wider leading-none">{verdictMeta.label}</div>
-                  <div className="text-[10px] mt-1 tracking-wide">{research.verdict_label.toUpperCase()}</div>
+            <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+              <div
+                className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
+                style={{
+                  borderColor: verdictMeta.color,
+                  color: verdictMeta.color,
+                  transform: `rotate(${verdictMeta.rotate})`,
+                }}
+              >
+                <verdictMeta.Icon size={22} className="mx-auto mb-1" />
+                <div className="text-lg font-bold tracking-wider leading-none">{verdictMeta.label}</div>
+                <div className="text-[10px] mt-1 tracking-wide">{research.verdict_label.toUpperCase()}</div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
+                  <p className="text-sm font-medium">{research.product_name}</p>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
-                    <p className="text-sm font-medium">{research.product_name}</p>
-                  </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                    Worth-it score — {research.worth_it_score}/10
+                  </p>
+                  <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
+                </div>
 
-                  <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
-                      Worth-it score — {research.worth_it_score}/10
-                    </p>
-                    <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
-                  </div>
-
-                  <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
-                    <p className="text-sm leading-relaxed">{research.summary}</p>
-                  </div>
+                <div>
+                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
+                  <p className="text-sm leading-relaxed">{research.summary}</p>
                 </div>
               </div>
-            )}
+            </div>
 
             {research?.alternatives?.length > 0 && (
               <div className="mt-8">
