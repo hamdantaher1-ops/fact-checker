@@ -11,11 +11,13 @@
 // Variables (Settings → Environment Variables), using a key from
 // console.anthropic.com. Redeploy after adding it.
 //
-// Optional but recommended: set UPSTASH_REDIS_REST_URL and
-// UPSTASH_REDIS_REST_TOKEN (from a free Upstash Redis database, connected
-// through Vercel's Storage tab) to cap each visitor at DAILY_LIMIT
-// researches per day. Without these two set, rate limiting is skipped
-// entirely (the app still works, just unprotected against abuse).
+// Optional but recommended: connect a free Upstash Redis database through
+// your Vercel project's Storage tab. Vercel names the resulting env vars
+// KV_REST_API_URL and KV_REST_API_TOKEN (it also accepts the raw Upstash
+// names UPSTASH_REDIS_REST_URL/TOKEN, in case you set those manually) to
+// cap each visitor at DAILY_LIMIT researches per day. Without either pair
+// set, rate limiting is skipped entirely (the app still works, just
+// unprotected against abuse).
 
 const DAILY_LIMIT = 5;
 
@@ -45,8 +47,8 @@ function getClientIp(req) {
 // vars aren't set, so the app still works before you finish setting up
 // the rate limiter.
 async function checkAndIncrementDailyCount(ip) {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) {
     return { enforced: false, allowed: true, count: 0 };
   }
