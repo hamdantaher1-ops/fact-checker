@@ -10,6 +10,14 @@
 // Required: set ANTHROPIC_API_KEY in your Vercel project's Environment
 // Variables (Settings → Environment Variables), using a key from
 // console.anthropic.com. Redeploy after adding it.
+//
+// Optional but recommended: set UPSTASH_REDIS_REST_URL and
+// UPSTASH_REDIS_REST_TOKEN (from a free Upstash Redis database, connected
+// through Vercel's Storage tab) to cap each visitor at DAILY_LIMIT
+// researches per day. Without these two set, rate limiting is skipped
+// entirely (the app still works, just unprotected against abuse).
+
+const DAILY_LIMIT = 5;
 
 function stripFences(text) {
   return text
@@ -17,6 +25,50 @@ function stripFences(text) {
     .replace(/^```(json)?/i, "")
     .replace(/```$/, "")
     .trim();
+}
+
+// Best-effort identification of the visitor by IP address. There's no
+// login here, so this is a speed bump against abuse, not a hard identity
+// check — people on the same network share a count, and it resets if
+// someone switches networks. That's an accepted tradeoff for a free,
+// no-login app.
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+// Talks to Upstash Redis over its REST API (no extra npm package needed).
+// Returns { limited: true } and skips enforcement entirely if the two env
+// vars aren't set, so the app still works before you finish setting up
+// the rate limiter.
+async function checkAndIncrementDailyCount(ip) {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) {
+    return { enforced: false, allowed: true, count: 0 };
+  }
+
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, UTC
+  const key = `research-count:${ip}:${today}`;
+
+  const incrRes = await fetch(`${url}/incr/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const incrData = await incrRes.json();
+  const count = incrData?.result;
+
+  if (count === 1) {
+    // First request today for this IP — set the key to expire in ~26
+    // hours so it cleans itself up without needing exact midnight math.
+    await fetch(`${url}/expire/${encodeURIComponent(key)}/93600`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  return { enforced: true, allowed: typeof count === "number" && count <= DAILY_LIMIT, count };
 }
 
 const VERDICT_TOOL = {
@@ -82,6 +134,23 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     res.status(500).json({ error: "Server is missing ANTHROPIC_API_KEY. Add it in Vercel project settings and redeploy." });
+    return;
+  }
+
+  const ip = getClientIp(req);
+  let rateLimit;
+  try {
+    rateLimit = await checkAndIncrementDailyCount(ip);
+  } catch (err) {
+    // If the rate limiter itself fails (e.g. Upstash is briefly down),
+    // fail open rather than blocking every user's research.
+    rateLimit = { enforced: false, allowed: true, count: 0 };
+  }
+  if (!rateLimit.allowed) {
+    res.status(429).json({
+      error: `You've used all ${DAILY_LIMIT} free researches for today. Try again tomorrow.`,
+      dailyLimit: DAILY_LIMIT,
+    });
     return;
   }
 
