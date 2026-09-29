@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Privacy Policy — Fat Checker</title>
+    <style>
+      :root {
+        --ink: #1C2A33;
+        --paper: #EEEBE2;
+        --paper-line: #D9D4C6;
+        --rust: #A8431F;
+        --green: #2F6B4F;
+        --slate: #6B6459;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: ui-serif, Georgia, "Times New Roman", serif;
+        line-height: 1.6;
+      }
+      .wrap {
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+      .back {
+        display: inline-block;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 13px;
+        text-decoration: none;
+        color: var(--slate);
+        border-bottom: 1px solid var(--paper-line);
+        padding-bottom: 2px;
+        margin-bottom: 32px;
+      }
+      .back:hover { color: var(--ink); }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .updated {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+        color: var(--slate);
+        margin: 0 0 40px;
+      }
+      h2 {
+        font-size: 16px;
+        margin: 36px 0 10px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid var(--paper-line);
+      }
+      p, li {
+        font-size: 15px;
+        color: #2a3841;
+      }
+      ul { padding-left: 20px; }
+      li { margin-bottom: 8px; }
+      a { color: var(--rust); }
+      .badge {
+        display: inline-block;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--green);
+        border: 1px solid var(--green);
+        border-radius: 999px;
+        padding: 3px 10px;
+        margin-bottom: 20px;
+      }
+      footer {
+        margin-top: 48px;
+        padding-top: 16px;
+        border-top: 1px solid var(--paper-line);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+        color: var(--slate);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <a class="back" href="/">&larr; Back to Fat Checker</a>
+      <div class="badge">No account. No login. No data sold.</div>
+      <h1>Privacy Policy</h1>
+      <p class="updated">Last updated September 29, 2026</p>
+
+      <p>
+        Fat Checker is a small, independent tool that looks up an Instagram post you link to and
+        researches whether the product or service in it is worth buying. This page explains, in
+        plain language, what happens to your information when you use it.
+      </p>
+
+      <h2>What you give the app</h2>
+      <ul>
+        <li>The Instagram post link you paste in.</li>
+        <li>Nothing else. There's no account, no sign-up, and no personal profile.</li>
+      </ul>
+
+      <h2>What the app collects automatically</h2>
+      <ul>
+        <li>
+          <strong>The post's caption text</strong> — read directly from the Instagram post you
+          linked to, so the app knows what product or service to research.
+        </li>
+        <li>
+          <strong>Your IP address</strong> — used only to enforce a daily limit on how many
+          researches one visitor can run, so the app doesn't get overwhelmed or abused. It is not
+          logged alongside anything else about you, and it isn't used to identify or track you
+          across visits beyond that daily count.
+        </li>
+      </ul>
+
+      <h2>Who else sees this</h2>
+      <p>To do its job, the app sends the information above to two outside services:</p>
+      <ul>
+        <li>
+          <strong>Meta</strong> (Instagram's parent company), to fetch basic public information
+          about the post you linked to, through Instagram's own official lookup endpoint.
+        </li>
+        <li>
+          <strong>Anthropic</strong>, whose AI model reads the caption and searches the web to
+          produce the verdict you see. The caption text is sent to Anthropic for this purpose;
+          nothing else about you is sent.
+        </li>
+      </ul>
+      <p>
+        No data is sold, rented, or shared with advertisers. There are no analytics trackers or
+        ad networks on this site.
+      </p>
+
+      <h2>What's stored</h2>
+      <p>
+        The app doesn't keep a database of your searches. Each request is processed and the
+        result is shown to you in the moment; it isn't saved afterward, except for a short-lived
+        daily counter (tied to your IP address, described above) used purely for the rate limit,
+        which clears itself after about a day.
+      </p>
+
+      <h2>About the verdicts</h2>
+      <p>
+        Verdicts are generated automatically by an AI model researching public information. They
+        are opinions formed from that research, not professional, legal, or financial advice, and
+        they can be wrong. Always use your own judgment before purchasing anything.
+      </p>
+
+      <h2>Changes to this policy</h2>
+      <p>
+        If how the app handles data changes in a meaningful way, this page will be updated and
+        the date at the top will reflect that.
+      </p>
+
+      <h2>Questions</h2>
+      <p>
+        This is an independent, small-scale project. If you have questions about how it works,
+        reach out at <a href="mailto:hamdan.taher1@gmail.com">hamdan.taher1@gmail.com</a>.
+      </p>
+
+      <footer>Fat Checker — a dossier for every product someone tagged you in.</footer>
+    </div>
+  </body>
+</html>

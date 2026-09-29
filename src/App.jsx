@@ -390,7 +390,10 @@ export default function FactChecker() {
       <footer className="max-w-3xl mx-auto px-6 pb-10 pt-4 text-[11px] opacity-50 leading-relaxed border-t" style={{ borderColor: PAPER_LINE }}>
         <Stamp size={12} className="inline mr-1 -mt-0.5" />
         Verdicts are generated from automated web research and are not professional or legal advice. Always use your
-        own judgment before purchasing.
+        own judgment before purchasing.{" "}
+        <a href="/privacy.html" className="underline hover:opacity-80">
+          Privacy Policy
+        </a>
       </footer>
     </div>
   );
