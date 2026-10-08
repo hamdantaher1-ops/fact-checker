@@ -45,6 +45,7 @@ function stripFences(text) {
 //                   \-> error (from any step)
 export default function FactChecker() {
   const [url, setUrl] = useState("");
+  const [brand, setBrand] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("/api/oembed");
   const [showTokenHelp, setShowTokenHelp] = useState(false);
@@ -78,13 +79,13 @@ export default function FactChecker() {
     return (data.description && data.description.trim()) || (data.title && data.title.trim()) || "";
   }
 
-  async function runResearch(caption) {
+  async function runResearch(payload) {
     setStage("researching");
     try {
       const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ caption: caption.trim() }),
+        body: JSON.stringify(payload),
       });
       const raw = await response.text();
       let data;
@@ -126,7 +127,7 @@ export default function FactChecker() {
     try {
       const caption = await fetchCaption(clean);
       if (caption) {
-        await runResearch(caption);
+        await runResearch({ caption });
       } else {
         setStage("need-caption");
       }
@@ -140,9 +141,18 @@ export default function FactChecker() {
     }
   }
 
+  async function handleSearchBrand() {
+    const name = brand.trim();
+    if (!name) return;
+    setErrorMessage("");
+    setResearch(null);
+    setManualCaption("");
+    await runResearch({ query: name });
+  }
+
   function handleManualContinue() {
     if (!manualCaption.trim()) return;
-    runResearch(manualCaption.trim());
+    runResearch({ caption: manualCaption.trim() });
   }
 
   const busy = stage === "fetching" || stage === "researching";
@@ -169,8 +179,46 @@ export default function FactChecker() {
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
         {/* Exhibit A: intake */}
         <section>
-          <SectionLabel index="A" title="The Link" />
+          <SectionLabel index="A" title="The Subject" />
           <div className="mt-4 space-y-3">
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSearchBrand();
+              }}
+            >
+              <div className="flex-1 flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
+                <Search size={16} className="opacity-50 shrink-0" />
+                <input
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  placeholder="Type a brand or product name"
+                  maxLength={120}
+                  disabled={busy}
+                  className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={busy || !brand.trim()}
+                className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0"
+                style={{ background: INK }}
+              >
+                {stage === "researching" ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" /> Researching…
+                  </>
+                ) : (
+                  <>
+                    <Search size={16} /> Check it
+                  </>
+                )}
+              </button>
+            </form>
+
+            <p className="text-xs text-center opacity-50 py-1">— or paste an Instagram post —</p>
+
             <div className="flex gap-2">
               <div className="flex-1 flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
                 <Link2 size={16} className="opacity-50 shrink-0" />

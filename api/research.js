@@ -156,20 +156,39 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { caption } = req.body || {};
-  if (!caption || typeof caption !== "string" || !caption.trim()) {
-    res.status(400).json({ error: "Missing 'caption' in request body." });
+  // Two ways in: the caption text of an Instagram post, or a brand/product
+  // name typed straight into the search bar.
+  const { caption, query } = req.body || {};
+  const hasCaption = typeof caption === "string" && caption.trim().length > 0;
+  const hasQuery = typeof query === "string" && query.trim().length > 0;
+  if (!hasCaption && !hasQuery) {
+    res.status(400).json({ error: "Missing 'caption' or 'query' in request body." });
+    return;
+  }
+  if (!hasCaption && query.trim().length > 120) {
+    res.status(400).json({ error: "That name is too long — keep it to a brand or product name." });
     return;
   }
 
-  const prompt = `You are a consumer product research analyst. Below is the caption text from an Instagram post advertising a product or service.
+  const subject = hasCaption
+    ? `Below is the caption text from an Instagram post advertising a product or service.
 
 CAPTION:
 """
 ${caption.trim()}
+"""`
+    : `A shopper typed in the name of a brand, product, or service and wants to know whether it is worth buying.
+
+NAME:
+"""
+${query.trim()}
 """
 
-1. Identify the specific product, brand, or service being promoted.
+If the name is ambiguous, pick the most likely consumer product or brand and say which one you assumed in the summary.`;
+
+  const prompt = `You are a consumer product research analyst. ${subject}
+
+1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
 3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
