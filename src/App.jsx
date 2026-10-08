@@ -194,6 +194,10 @@ export default function FactChecker() {
         <section>
           <SectionLabel index="A" title="The Subject" />
           <div className="mt-4 space-y-3">
+            <p className="text-sm leading-relaxed opacity-80">
+              Type a <strong>brand or product name</strong>, or paste a link to an{" "}
+              <strong>Instagram post</strong>. Either way, we'll research it and tell you if it's worth buying.
+            </p>
             <form
               className="flex gap-2"
               onSubmit={(e) => {
