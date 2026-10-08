@@ -44,8 +44,7 @@ function stripFences(text) {
 // idle -> fetching -> (need-caption -> researching) | researching -> done
 //                   \-> error (from any step)
 export default function FactChecker() {
-  const [url, setUrl] = useState("");
-  const [brand, setBrand] = useState("");
+  const [searchText, setSearchText] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [proxyUrl, setProxyUrl] = useState("/api/oembed");
   const [showTokenHelp, setShowTokenHelp] = useState(false);
@@ -111,15 +110,31 @@ export default function FactChecker() {
     }
   }
 
-  async function handleRun() {
+  // One search bar, two kinds of input: an Instagram link goes through the
+  // fetch-the-post flow, anything else is treated as a brand/product name.
+  function looksLikeLink(text) {
+    return /^https?:\/\//i.test(text) || /^www\./i.test(text) || /instagram\.com\//i.test(text);
+  }
+
+  async function handleSubmit() {
+    const text = searchText.trim();
+    if (!text) return;
+    if (looksLikeLink(text)) {
+      await handleRun(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    } else {
+      await handleSearchBrand(text);
+    }
+  }
+
+  async function handleRun(linkText) {
     setErrorMessage("");
     setResearch(null);
     setManualCaption("");
 
-    const clean = extractShortcode(url);
+    const clean = extractShortcode(linkText);
     if (!clean) {
       setStage("error");
-      setErrorMessage("That doesn't look like an instagram.com link. Paste the full post URL.");
+      setErrorMessage("Links need to be Instagram posts. To look up anything else, just type the brand name.");
       return;
     }
 
@@ -141,9 +156,7 @@ export default function FactChecker() {
     }
   }
 
-  async function handleSearchBrand() {
-    const name = brand.trim();
-    if (!name) return;
+  async function handleSearchBrand(name) {
     setErrorMessage("");
     setResearch(null);
     setManualCaption("");
@@ -185,54 +198,23 @@ export default function FactChecker() {
               className="flex gap-2"
               onSubmit={(e) => {
                 e.preventDefault();
-                handleSearchBrand();
+                handleSubmit();
               }}
             >
               <div className="flex-1 flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
                 <Search size={16} className="opacity-50 shrink-0" />
                 <input
-                  value={brand}
-                  onChange={(e) => setBrand(e.target.value)}
-                  placeholder="Type a brand or product name"
-                  maxLength={120}
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder="Type a brand name or paste an Instagram link"
+                  maxLength={500}
                   disabled={busy}
                   className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
                 />
               </div>
               <button
                 type="submit"
-                disabled={busy || !brand.trim()}
-                className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0"
-                style={{ background: INK }}
-              >
-                {stage === "researching" ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" /> Researching…
-                  </>
-                ) : (
-                  <>
-                    <Search size={16} /> Check it
-                  </>
-                )}
-              </button>
-            </form>
-
-            <p className="text-xs text-center opacity-50 py-1">— or paste an Instagram post —</p>
-
-            <div className="flex gap-2">
-              <div className="flex-1 flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
-                <Link2 size={16} className="opacity-50 shrink-0" />
-                <input
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://www.instagram.com/p/..."
-                  disabled={busy}
-                  className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
-                />
-              </div>
-              <button
-                onClick={handleRun}
-                disabled={busy || !url.trim()}
+                disabled={busy || !searchText.trim()}
                 className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0"
                 style={{ background: INK }}
               >
@@ -250,7 +232,7 @@ export default function FactChecker() {
                   </>
                 )}
               </button>
-            </div>
+            </form>
 
             <button
               onClick={() => setShowTokenHelp((s) => !s)}
@@ -312,7 +294,7 @@ export default function FactChecker() {
               </p>
               <div className="flex items-center gap-3">
                 <a
-                  href={url}
+                  href={/^https?:\/\//i.test(searchText.trim()) ? searchText.trim() : `https://${searchText.trim()}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs font-medium hover:underline flex items-center gap-1"
