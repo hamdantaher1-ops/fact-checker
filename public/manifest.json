@@ -1,6 +1,6 @@
 {
-  "name": "Fat Checker",
-  "short_name": "Fat Checker",
+  "name": "ADJury",
+  "short_name": "ADJury",
   "description": "A dossier for every product someone tagged you in.",
   "start_url": "/",
   "display": "standalone",
