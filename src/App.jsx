@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Info, Stamp } from "lucide-react";
+import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Stamp } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Design tokens (see plan): case-file / dossier aesthetic.
@@ -45,35 +45,28 @@ function stripFences(text) {
 //                   \-> error (from any step)
 export default function FactChecker() {
   const [searchText, setSearchText] = useState("");
-  const [accessToken, setAccessToken] = useState("");
-  const [proxyUrl, setProxyUrl] = useState("/api/oembed");
-  const [showTokenHelp, setShowTokenHelp] = useState(false);
 
   const [stage, setStage] = useState("idle"); // idle | fetching | need-caption | researching | done | error
   const [errorMessage, setErrorMessage] = useState("");
   const [manualCaption, setManualCaption] = useState("");
+  const [clipboardNote, setClipboardNote] = useState("");
   const [research, setResearch] = useState(null);
 
   const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
 
   async function fetchCaption(postUrl) {
-    let endpoint = `${proxyUrl}?url=${encodeURIComponent(postUrl)}`;
-    if (accessToken.trim()) {
-      endpoint += `&access_token=${encodeURIComponent(accessToken.trim())}`;
-    }
+    const endpoint = `/api/oembed?url=${encodeURIComponent(postUrl)}`;
     const res = await fetch(endpoint);
     const raw = await res.text();
     let data;
     try {
       data = JSON.parse(raw);
     } catch {
-      throw new Error(
-        "The post-lookup proxy didn't return JSON — likely it isn't running yet (e.g. you're on a plain `npm run dev` " +
-          "server, which doesn't execute /api functions). Deploy to Vercel, or run `vercel dev` locally, to test this."
-      );
+      throw new Error("The post lookup didn't respond properly — please try again in a moment.");
     }
     if (!res.ok) {
-      throw new Error(data?.error || data?.error?.message || `Proxy returned ${res.status}`);
+      const errMsg = typeof data?.error === "string" ? data.error : data?.error?.message;
+      throw new Error(errMsg || `Post lookup returned ${res.status}`);
     }
     return (data.description && data.description.trim()) || (data.title && data.title.trim()) || "";
   }
@@ -96,7 +89,8 @@ export default function FactChecker() {
         );
       }
       if (!response.ok) {
-        throw new Error(data?.error || `Proxy returned ${response.status}`);
+        const errMsg = typeof data?.error === "string" ? data.error : data?.error?.message;
+        throw new Error(errMsg || `Research returned ${response.status}`);
       }
       let parsed = data;
       if (typeof data === "string") {
@@ -130,6 +124,7 @@ export default function FactChecker() {
     setErrorMessage("");
     setResearch(null);
     setManualCaption("");
+    setClipboardNote("");
 
     const clean = extractShortcode(linkText);
     if (!clean) {
@@ -150,7 +145,7 @@ export default function FactChecker() {
       setStage("error");
       setErrorMessage(
         err.message?.includes("Failed to fetch")
-          ? "Couldn't reach the proxy — check the proxy endpoint below is correct and deployed."
+          ? "Couldn't reach the post lookup — check your connection and try again."
           : err.message || "Couldn't fetch that post."
       );
     }
@@ -238,47 +233,6 @@ export default function FactChecker() {
               </button>
             </form>
 
-            <button
-              onClick={() => setShowTokenHelp((s) => !s)}
-              className="text-xs flex items-center gap-1 opacity-60 hover:opacity-100"
-            >
-              <Info size={13} /> {showTokenHelp ? "hide advanced options" : "advanced: proxy & token settings"}
-            </button>
-
-            {showTokenHelp && (
-              <div className="space-y-3">
-                <div className="flex items-center border px-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                  <input
-                    value={proxyUrl}
-                    onChange={(e) => setProxyUrl(e.target.value)}
-                    placeholder="/api/oembed"
-                    className="w-full bg-transparent outline-none px-2 py-2 text-sm"
-                  />
-                </div>
-                <p className="text-xs leading-relaxed opacity-70">
-                  This app looks up the post through a small server-side proxy instead of Meta directly — browsers
-                  can't call graph.facebook.com themselves. The default <code>/api/oembed</code> works once this app
-                  is deployed alongside the included proxy function. It won't resolve in this chat preview, since
-                  there's no backend running here — deploy first, then test live. Point this field at a full URL if
-                  your proxy lives on a different domain.
-                </p>
-                <div className="flex items-center border px-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                  <input
-                    value={accessToken}
-                    onChange={(e) => setAccessToken(e.target.value)}
-                    type="password"
-                    placeholder="app-id|client-token (optional, overrides the proxy's default)"
-                    className="w-full bg-transparent outline-none px-2 py-2 text-sm"
-                  />
-                </div>
-                <p className="text-xs leading-relaxed opacity-70">
-                  Not required — public posts look up tokenless through the proxy, capped at 1,000 requests/hour. Set{" "}
-                  <code>META_ACCESS_TOKEN</code> as an environment variable on your proxy for a shared 5M/day ceiling
-                  instead of typing one here per user.
-                </p>
-              </div>
-            )}
-
             {stage === "error" && (
               <p className="text-sm" style={{ color: RUST }}>
                 {errorMessage}
@@ -293,9 +247,14 @@ export default function FactChecker() {
             <SectionLabel index="B" title="One More Thing" />
             <div className="mt-4 space-y-3">
               <p className="text-sm leading-relaxed">
-                This post's caption couldn't be read automatically (common on some posts — Instagram doesn't always
-                expose it to an automated lookup). Open the post, copy the caption, and paste it here to continue.
+                Instagram didn't share this post's caption automatically — it happens on some posts. No problem,
+                grab it yourself:
               </p>
+              <ol className="text-sm leading-relaxed list-decimal list-inside space-y-1 opacity-80">
+                <li>Open the post on Instagram (link below).</li>
+                <li>Copy the caption text.</li>
+                <li>Paste it in the box and hit Continue.</li>
+              </ol>
               <div className="flex items-center gap-3">
                 <a
                   href={/^https?:\/\//i.test(searchText.trim()) ? searchText.trim() : `https://${searchText.trim()}`}
@@ -310,9 +269,14 @@ export default function FactChecker() {
                   onClick={async () => {
                     try {
                       const text = await navigator.clipboard.readText();
-                      if (text) setManualCaption(text);
+                      if (text) {
+                        setManualCaption(text);
+                        setClipboardNote("Caption pasted — hit Continue below.");
+                      } else {
+                        setClipboardNote("Your clipboard looks empty — copy the caption first, then paste.");
+                      }
                     } catch {
-                      setErrorMessage("Couldn't read the clipboard — paste into the box manually instead.");
+                      setClipboardNote("Couldn't read the clipboard — tap the box below and paste manually instead.");
                     }
                   }}
                   className="text-xs font-medium hover:underline opacity-70 hover:opacity-100"
@@ -320,7 +284,13 @@ export default function FactChecker() {
                   Paste from clipboard
                 </button>
               </div>
+              {clipboardNote && (
+                <p className="text-xs" style={{ color: RUST }}>
+                  {clipboardNote}
+                </p>
+              )}
               <textarea
+                autoFocus
                 value={manualCaption}
                 onChange={(e) => setManualCaption(e.target.value)}
                 rows={4}
