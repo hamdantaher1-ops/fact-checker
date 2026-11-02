@@ -119,6 +119,45 @@ const VERDICT_TOOL = {
   },
 };
 
+const FACTCHECK_TOOL = {
+  name: "submit_factcheck",
+  description: "Submit the final structured fact-check once research is complete. Call this exactly once, as your last action.",
+  input_schema: {
+    type: "object",
+    properties: {
+      claim: { type: "string", description: "The factual claim being checked, stated in one clear sentence." },
+      rating: {
+        type: "string",
+        enum: ["True", "Mostly True", "Mixed", "Misleading", "False", "Can't Verify"],
+        description: "True = accurate with no important context missing. Mostly True = right in substance, minor details off. Mixed = part accurate, part not. Misleading = built on a real fact but framed so a reasonable person takes away something untrue. False = contradicted by the evidence. Can't Verify = no reliable evidence either way, or the statement is opinion/prediction rather than a checkable fact.",
+      },
+      summary: {
+        type: "string",
+        description: "2-4 sentences explaining the rating in plain language, including any important context the claim leaves out.",
+      },
+      evidence: {
+        type: "array",
+        description: "2 to 5 short bullet points: the key facts the rating rests on.",
+        items: { type: "string" },
+      },
+      sources: {
+        type: "array",
+        description: "At least 3 sources when available.",
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            url: { type: "string" },
+            note: { type: "string", description: "A few words on what this source shows, e.g. 'CDC data on vitamin D supplementation trials'." },
+          },
+          required: ["title", "url", "note"],
+        },
+      },
+    },
+    required: ["claim", "rating", "summary", "evidence", "sources"],
+  },
+};
+
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -156,28 +195,75 @@ export default async function handler(req, res) {
     return;
   }
 
-  // Two ways in: the caption text of an Instagram post, or a brand/product
-  // name typed straight into the search bar.
-  const { caption, query } = req.body || {};
+  // Two ways in: the caption text of an Instagram post, or text typed
+  // straight into the search bar (a brand/product name in product mode,
+  // a claim in fact-check mode). `mode` selects which kind of research
+  // runs; anything other than "factcheck" is treated as product mode, so
+  // older clients keep working.
+  const { caption, query, mode } = req.body || {};
+  const isFactCheck = mode === "factcheck";
   const hasCaption = typeof caption === "string" && caption.trim().length > 0;
   const hasQuery = typeof query === "string" && query.trim().length > 0;
   if (!hasCaption && !hasQuery) {
     res.status(400).json({ error: "Missing 'caption' or 'query' in request body." });
     return;
   }
-  if (!hasCaption && query.trim().length > 120) {
-    res.status(400).json({ error: "That name is too long — keep it to a brand or product name." });
+  if (!hasCaption && query.trim().length > (isFactCheck ? 500 : 120)) {
+    res.status(400).json({
+      error: isFactCheck
+        ? "That claim is too long — state it in a sentence or two."
+        : "That name is too long — keep it to a brand or product name.",
+    });
     return;
   }
 
-  const subject = hasCaption
-    ? `Below is the caption text from an Instagram post advertising a product or service.
+  let subject;
+  let prompt;
+  let tool;
+  let toolName;
+
+  if (isFactCheck) {
+    tool = FACTCHECK_TOOL;
+    toolName = "submit_factcheck";
+    subject = hasCaption
+      ? `Below is the caption text from an Instagram post. The poster is making a claim, and a reader wants to know whether it's true. The claim may be stated outright in the caption or clearly implied by it — check the claim the post is really making.
 
 CAPTION:
 """
 ${caption.trim()}
 """`
-    : `A shopper typed in the name of a brand, product, or service and wants to know whether it is worth buying.
+      : `A user heard or read the following claim and wants to know whether it's true.
+
+CLAIM:
+"""
+${query.trim()}
+"""`;
+
+    prompt = `You are a fact-checker. ${subject}
+
+1. Identify the single most important factual claim being made — the one a reasonable reader would take away. Claims can be about anything: a news event, a health or science statement, a statistic, something a public figure supposedly did or said. If the text makes several claims, check the central one and state it exactly in the claim field.
+2. Search the web for what reliable sources say: primary sources and official records first, then reputable news outlets, and for health or science claims the mainstream scientific/medical consensus (major medical institutions, peer-reviewed findings). Do not treat the claimant's own posts, content farms, or unsourced social posts as evidence.
+3. Weigh the evidence and rate the claim:
+   - True: accurate, with no important context missing.
+   - Mostly True: accurate in substance, minor details off or slightly overstated.
+   - Mixed: part accurate, part not — or the evidence genuinely cuts both ways.
+   - Misleading: built on a real fact but framed so a reasonable person takes away something untrue (missing context, cherry-picked numbers, old footage presented as current, and similar).
+   - False: contradicted by the evidence.
+   - Can't Verify: no reliable evidence either way, or the statement is opinion or prediction rather than a checkable fact — say which in the summary.
+4. Judge the claim, never the person making it. Stick to what the evidence shows; where sources disagree, say so in the evidence.
+
+Once your research is complete, call the submit_factcheck tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
+  } else {
+    tool = VERDICT_TOOL;
+    toolName = "submit_verdict";
+    subject = hasCaption
+      ? `Below is the caption text from an Instagram post advertising a product or service.
+
+CAPTION:
+"""
+${caption.trim()}
+"""`
+      : `A shopper typed in the name of a brand, product, or service and wants to know whether it is worth buying.
 
 NAME:
 """
@@ -186,7 +272,7 @@ ${query.trim()}
 
 If the name is ambiguous, pick the most likely consumer product or brand and say which one you assumed in the summary.`;
 
-  const prompt = `You are a consumer product research analyst. ${subject}
+    prompt = `You are a consumer product research analyst. ${subject}
 
 1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
@@ -194,6 +280,7 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
+  }
 
   try {
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -207,7 +294,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }, VERDICT_TOOL],
+        tools: [{ type: "web_search_20250305", name: "web_search" }, tool],
       }),
     });
     const data = await anthropicRes.json();
@@ -216,7 +303,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       return;
     }
 
-    const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === "submit_verdict");
+    const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === toolName);
     if (toolUse) {
       res.status(200).json(toolUse.input);
       return;

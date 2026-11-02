@@ -21,6 +21,15 @@ const VERDICTS = {
   "Avoid": { color: RUST, label: "AVOID", Icon: ShieldX, rotate: "5deg" },
 };
 
+const FACT_RATINGS = {
+  "True": { color: GREEN, label: "TRUE", Icon: ShieldCheck, rotate: "-6deg" },
+  "Mostly True": { color: GREEN, label: "MOSTLY TRUE", Icon: ShieldCheck, rotate: "3deg" },
+  "Mixed": { color: AMBER, label: "MIXED", Icon: ShieldAlert, rotate: "-4deg" },
+  "Misleading": { color: RUST, label: "MISLEADING", Icon: ShieldAlert, rotate: "4deg" },
+  "False": { color: RUST, label: "FALSE", Icon: ShieldX, rotate: "-5deg" },
+  "Can't Verify": { color: SLATE, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
+};
+
 function extractShortcode(url) {
   try {
     const u = new URL(url.trim());
@@ -45,6 +54,7 @@ function stripFences(text) {
 //                   \-> error (from any step)
 export default function FactChecker() {
   const [searchText, setSearchText] = useState("");
+  const [mode, setMode] = useState("product"); // product | factcheck
 
   const [stage, setStage] = useState("idle"); // idle | fetching | need-caption | researching | done | error
   const [errorMessage, setErrorMessage] = useState("");
@@ -53,6 +63,17 @@ export default function FactChecker() {
   const [research, setResearch] = useState(null);
 
   const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
+  const factMeta = research?.rating ? FACT_RATINGS[research.rating] : null;
+
+  function switchMode(next) {
+    if (next === mode) return;
+    setMode(next);
+    setStage("idle");
+    setResearch(null);
+    setErrorMessage("");
+    setManualCaption("");
+    setClipboardNote("");
+  }
 
   async function fetchCaption(postUrl) {
     const endpoint = `/api/oembed?url=${encodeURIComponent(postUrl)}`;
@@ -77,7 +98,7 @@ export default function FactChecker() {
       const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ mode, ...payload }),
       });
       const raw = await response.text();
       let data;
@@ -189,10 +210,46 @@ export default function FactChecker() {
         <section>
           <SectionLabel index="A" title="The Subject" />
           <div className="mt-4 space-y-3">
-            <p className="text-sm leading-relaxed opacity-80">
-              Type a <strong>brand or product name</strong>, or paste a link to an{" "}
-              <strong>Instagram post</strong>. Either way, we'll research it and tell you if it's worth buying.
-            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => switchMode("product")}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs font-semibold tracking-wide border disabled:opacity-60"
+                style={
+                  mode === "product"
+                    ? { background: INK, color: PAPER, borderColor: INK }
+                    : { background: "transparent", color: INK, borderColor: INK }
+                }
+              >
+                Product verdict
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode("factcheck")}
+                disabled={busy}
+                className="px-3 py-1.5 text-xs font-semibold tracking-wide border disabled:opacity-60"
+                style={
+                  mode === "factcheck"
+                    ? { background: INK, color: PAPER, borderColor: INK }
+                    : { background: "transparent", color: INK, borderColor: INK }
+                }
+              >
+                Fact-check a claim
+              </button>
+            </div>
+            {mode === "product" ? (
+              <p className="text-sm leading-relaxed opacity-80">
+                Type a <strong>brand or product name</strong>, or paste a link to an{" "}
+                <strong>Instagram post</strong>. Either way, we'll research it and tell you if it's worth buying.
+              </p>
+            ) : (
+              <p className="text-sm leading-relaxed opacity-80">
+                Paste a link to an <strong>Instagram post</strong> where someone makes a claim — about an event, a
+                health tip, anything — or <strong>type the claim</strong> itself. We'll check it against reliable
+                sources and tell you if it's true.
+              </p>
+            )}
             <form
               className="flex gap-2"
               onSubmit={(e) => {
@@ -205,7 +262,11 @@ export default function FactChecker() {
                 <input
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  placeholder="Type a brand name or paste an Instagram link"
+                  placeholder={
+                    mode === "product"
+                      ? "Type a brand name or paste an Instagram link"
+                      : "Paste an Instagram link, or type the claim you heard"
+                  }
                   maxLength={500}
                   disabled={busy}
                   className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
@@ -250,6 +311,12 @@ export default function FactChecker() {
                 Instagram didn't share this post's caption automatically — it happens on some posts. No problem,
                 grab it yourself:
               </p>
+              {mode === "factcheck" && (
+                <p className="text-sm leading-relaxed" style={{ color: RUST }}>
+                  Fact-checking a spoken claim? We can't hear the post's audio — if the claim was said out loud
+                  rather than written in the caption, just type the claim itself in the box below instead.
+                </p>
+              )}
               <ol className="text-sm leading-relaxed list-decimal list-inside space-y-1 opacity-80">
                 <li>Open the post on Instagram (link below).</li>
                 <li>Copy the caption text.</li>
@@ -294,7 +361,11 @@ export default function FactChecker() {
                 value={manualCaption}
                 onChange={(e) => setManualCaption(e.target.value)}
                 rows={4}
-                placeholder="Paste the post's caption here…"
+                placeholder={
+                  mode === "factcheck"
+                    ? "Paste the post's caption here — or type the claim as you heard it…"
+                    : "Paste the post's caption here…"
+                }
                 className="w-full text-sm p-3 border outline-none"
                 style={{ borderColor: INK, background: "#fff" }}
               />
@@ -311,10 +382,11 @@ export default function FactChecker() {
         )}
 
         {/* Exhibit C: findings */}
-        {stage === "done" && research && verdictMeta && (
+        {stage === "done" && research && (verdictMeta || factMeta) && (
           <section>
             <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
 
+            {verdictMeta && (
             <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
               <div
                 className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
@@ -348,6 +420,50 @@ export default function FactChecker() {
                 </div>
               </div>
             </div>
+            )}
+
+            {factMeta && (
+              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+                <div
+                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
+                  style={{
+                    borderColor: factMeta.color,
+                    color: factMeta.color,
+                    transform: `rotate(${factMeta.rotate})`,
+                  }}
+                >
+                  <factMeta.Icon size={22} className="mx-auto mb-1" />
+                  <div className="text-lg font-bold tracking-wider leading-none">{factMeta.label}</div>
+                  <div className="text-[10px] mt-1 tracking-wide">{research.rating.toUpperCase()}</div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">The claim</p>
+                    <p className="text-sm font-medium leading-relaxed">&ldquo;{research.claim}&rdquo;</p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">What the evidence shows</p>
+                    <p className="text-sm leading-relaxed">{research.summary}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {factMeta && research?.evidence?.length > 0 && (
+              <div className="mt-8">
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Key evidence</p>
+                <ul className="space-y-2">
+                  {research.evidence.map((point, i) => (
+                    <li key={i} className="text-sm leading-relaxed flex gap-2">
+                      <ChevronRight size={14} className="shrink-0 mt-1 opacity-50" />
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {research?.alternatives?.length > 0 && (
               <div className="mt-8">
