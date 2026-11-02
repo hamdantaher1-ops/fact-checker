@@ -30,6 +30,15 @@ const FACT_RATINGS = {
   "Can't Verify": { color: SLATE, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
 };
 
+// Homepage sample filings (option B, "The Proof"). Tapping one prefills the
+// intake in the matching mode so the visitor can run the real check.
+const SAMPLE_FILINGS = [
+  { mode: "product", query: "TurboTax", label: "TurboTax — is “free” really free?", stamp: "MIXED · 5/10", color: AMBER },
+  { mode: "factcheck", query: "Celery juice detoxes your liver", label: "“Celery juice detoxes your liver”", stamp: "MISLEADING", color: RUST },
+  { mode: "factcheck", query: "You should reapply sunscreen every 2 hours", label: "“Reapply sunscreen every 2 hours”", stamp: "TRUE", color: GREEN },
+  { mode: "product", query: "Miracle posture corrector", label: "Miracle posture corrector, as seen on IG", stamp: "AVOID", color: RUST },
+];
+
 function extractShortcode(url) {
   try {
     const u = new URL(url.trim());
@@ -206,6 +215,22 @@ export default function FactChecker() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
+        {/* Case facts: the credibility strip */}
+        <div className="grid sm:grid-cols-3 border" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}>
+          <div className="p-3">
+            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Sources</p>
+            <p className="text-xs leading-relaxed">Every verdict cites its sources. No source, no verdict.</p>
+          </div>
+          <div className="p-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: PAPER_LINE }}>
+            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Privacy</p>
+            <p className="text-xs leading-relaxed">No account. Nothing you paste is stored.</p>
+          </div>
+          <div className="p-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: PAPER_LINE }}>
+            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Fairness</p>
+            <p className="text-xs leading-relaxed">We judge claims and products — never people.</p>
+          </div>
+        </div>
+
         {/* Exhibit A: intake */}
         <section>
           <SectionLabel index="A" title="The Subject" />
@@ -301,6 +326,49 @@ export default function FactChecker() {
             )}
           </div>
         </section>
+
+        {/* Homepage proof sections — shown only before a run starts, so the
+            findings own the page once research begins */}
+        {stage === "idle" && (
+          <>
+            <section>
+              <SectionLabel index="B" title="Sample Filings" />
+              <div className="mt-2">
+                {SAMPLE_FILINGS.map((f) => (
+                  <button
+                    key={f.label}
+                    type="button"
+                    onClick={() => {
+                      switchMode(f.mode);
+                      setSearchText(f.query);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className="w-full flex items-center justify-between gap-3 py-2.5 border-b text-left hover:opacity-70"
+                    style={{ borderColor: PAPER_LINE }}
+                  >
+                    <span className="text-sm">{f.label}</span>
+                    <span
+                      className="text-[11px] font-bold tracking-wider px-2 py-0.5 shrink-0"
+                      style={{ border: `2px solid ${f.color}`, color: f.color }}
+                    >
+                      {f.stamp}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs opacity-60 mt-2">Examples of what comes back. Tap one to run it yourself.</p>
+            </section>
+
+            <section>
+              <SectionLabel index="C" title="How We Check" />
+              <ol className="mt-3 text-sm leading-relaxed list-decimal list-inside space-y-1.5 opacity-90">
+                <li>We read the post, then research the open web — official records and reputable reporting first.</li>
+                <li>For health claims, we weigh the mainstream medical consensus, not whoever posted loudest.</li>
+                <li>An AI analyst weighs the evidence and files the verdict. Every claim in it links to a source you can open.</li>
+              </ol>
+            </section>
+          </>
+        )}
 
         {/* Exhibit B: fallback when the caption couldn't be auto-read */}
         {stage === "need-caption" && (
