@@ -30,15 +30,6 @@ const FACT_RATINGS = {
   "Can't Verify": { color: SLATE, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
 };
 
-// Homepage sample filings (option B, "The Proof"). Tapping one prefills the
-// intake in the matching mode so the visitor can run the real check.
-const SAMPLE_FILINGS = [
-  { mode: "product", query: "TurboTax", label: "TurboTax — is “free” really free?", stamp: "MIXED · 5/10", color: AMBER },
-  { mode: "factcheck", query: "Celery juice detoxes your liver", label: "“Celery juice detoxes your liver”", stamp: "MISLEADING", color: RUST },
-  { mode: "factcheck", query: "You should reapply sunscreen every 2 hours", label: "“Reapply sunscreen every 2 hours”", stamp: "TRUE", color: GREEN },
-  { mode: "product", query: "Miracle posture corrector", label: "Miracle posture corrector, as seen on IG", stamp: "AVOID", color: RUST },
-];
-
 function extractShortcode(url) {
   try {
     const u = new URL(url.trim());
@@ -215,53 +206,41 @@ export default function FactChecker() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
-        {/* Case facts: the credibility strip */}
-        <div className="grid sm:grid-cols-3 border" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}>
-          <div className="p-3">
-            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Sources</p>
-            <p className="text-xs leading-relaxed">Every verdict cites its sources. No source, no verdict.</p>
-          </div>
-          <div className="p-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: PAPER_LINE }}>
-            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Privacy</p>
-            <p className="text-xs leading-relaxed">No account. Nothing you paste is stored.</p>
-          </div>
-          <div className="p-3 border-t sm:border-t-0 sm:border-l" style={{ borderColor: PAPER_LINE }}>
-            <p className="text-[11px] font-bold uppercase tracking-wider mb-1">Fairness</p>
-            <p className="text-xs leading-relaxed">We judge claims and products — never people.</p>
-          </div>
-        </div>
+        {/* Case facts: one line — sources, privacy, fairness */}
+        <p
+          className="text-xs sm:text-[13px] leading-relaxed border px-3 py-2.5"
+          style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}
+        >
+          Every verdict cites its sources <span className="opacity-50">·</span> No account, nothing stored{" "}
+          <span className="opacity-50">·</span> Claims and products judged, never people
+        </p>
 
         {/* Exhibit A: intake */}
         <section>
           <SectionLabel index="A" title="The Subject" />
           <div className="mt-4 space-y-3">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => switchMode("product")}
-                disabled={busy}
-                className="px-3 py-1.5 text-xs font-semibold tracking-wide border disabled:opacity-60"
-                style={
-                  mode === "product"
-                    ? { background: INK, color: PAPER, borderColor: INK }
-                    : { background: "transparent", color: INK, borderColor: INK }
-                }
-              >
+            <div className="flex items-center gap-3">
+              <span className={`text-xs tracking-wide ${mode === "product" ? "font-semibold" : "opacity-60"}`}>
                 Product verdict
-              </button>
+              </span>
               <button
                 type="button"
-                onClick={() => switchMode("factcheck")}
+                role="switch"
+                aria-checked={mode === "factcheck"}
+                aria-label="Toggle between product verdict and fact-check a claim"
+                onClick={() => switchMode(mode === "product" ? "factcheck" : "product")}
                 disabled={busy}
-                className="px-3 py-1.5 text-xs font-semibold tracking-wide border disabled:opacity-60"
-                style={
-                  mode === "factcheck"
-                    ? { background: INK, color: PAPER, borderColor: INK }
-                    : { background: "transparent", color: INK, borderColor: INK }
-                }
+                className="relative w-12 h-6 border shrink-0 disabled:opacity-60"
+                style={{ borderColor: INK, background: "rgba(255,255,255,0.35)" }}
               >
-                Fact-check a claim
+                <span
+                  className="absolute top-[2px] bottom-[2px] w-5 transition-all duration-200"
+                  style={{ background: INK, left: mode === "product" ? "2px" : "calc(100% - 22px)" }}
+                />
               </button>
+              <span className={`text-xs tracking-wide ${mode === "factcheck" ? "font-semibold" : "opacity-60"}`}>
+                Fact-check a claim
+              </span>
             </div>
             {mode === "product" ? (
               <p className="text-sm leading-relaxed opacity-80">
@@ -332,31 +311,58 @@ export default function FactChecker() {
         {stage === "idle" && (
           <>
             <section>
-              <SectionLabel index="B" title="Sample Filings" />
-              <div className="mt-2">
-                {SAMPLE_FILINGS.map((f) => (
-                  <button
-                    key={f.label}
-                    type="button"
-                    onClick={() => {
-                      switchMode(f.mode);
-                      setSearchText(f.query);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className="w-full flex items-center justify-between gap-3 py-2.5 border-b text-left hover:opacity-70"
-                    style={{ borderColor: PAPER_LINE }}
-                  >
-                    <span className="text-sm">{f.label}</span>
-                    <span
-                      className="text-[11px] font-bold tracking-wider px-2 py-0.5 shrink-0"
-                      style={{ border: `2px solid ${f.color}`, color: f.color }}
-                    >
-                      {f.stamp}
-                    </span>
-                  </button>
-                ))}
+              <SectionLabel index="B" title="What a Filing Looks Like" />
+              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+                <div
+                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
+                  style={{ borderColor: AMBER, color: AMBER, transform: "rotate(3deg)" }}
+                >
+                  <ShieldAlert size={22} className="mx-auto mb-1" />
+                  <div className="text-lg font-bold tracking-wider leading-none">MIXED</div>
+                  <div className="text-[10px] mt-1 tracking-wide">DECENT</div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product</p>
+                    <p className="text-sm font-medium">TurboTax — the “free” tax filing</p>
+                  </div>
+                  <WorthBar score={5} color={AMBER} />
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
+                    <p className="text-sm leading-relaxed">
+                      Great software, slippery pricing. “Free” filing excludes most filers — the FTC ordered Intuit
+                      to stop advertising it that way — and the paywalls tend to show up after you've typed in your
+                      whole return.
+                    </p>
+                  </div>
+                  <p className="text-xs opacity-60">9 sources · FTC order, 2024 · State AG settlement · Consumer Reports · +6</p>
+                </div>
               </div>
-              <p className="text-xs opacity-60 mt-2">Examples of what comes back. Tap one to run it yourself.</p>
+
+              <div className="mt-8 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+                <div
+                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
+                  style={{ borderColor: RUST, color: RUST, transform: "rotate(4deg)" }}
+                >
+                  <ShieldAlert size={22} className="mx-auto mb-1" />
+                  <div className="text-lg font-bold tracking-wider leading-none">MISLEADING</div>
+                  <div className="text-[10px] mt-1 tracking-wide">THE CLAIM</div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">The claim</p>
+                    <p className="text-sm font-medium leading-relaxed">“Celery juice detoxes your liver”</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">What the evidence shows</p>
+                    <p className="text-sm leading-relaxed">
+                      Your liver detoxes itself — no juice required. Celery juice is a fine drink, but there's no
+                      evidence it cleanses anything, and the posts selling it skip that part.
+                    </p>
+                  </div>
+                  <p className="text-xs opacity-60">4 sources · NIH · Cleveland Clinic · Mayo Clinic · +1</p>
+                </div>
+              </div>
             </section>
 
             <section>
