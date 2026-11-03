@@ -226,7 +226,7 @@ export default async function handler(req, res) {
     tool = FACTCHECK_TOOL;
     toolName = "submit_factcheck";
     subject = hasCaption
-      ? `Below is the caption text from an Instagram post. The poster is making a claim, and a reader wants to know whether it's true. The claim may be stated outright in the caption or clearly implied by it — check the claim the post is really making.
+      ? `Below is the text of a social media post (Instagram or Facebook). The poster is making a claim, and a reader wants to know whether it's true. The claim may be stated outright in the text or clearly implied by it — check the claim the post is really making.
 
 CAPTION:
 """
@@ -257,7 +257,7 @@ Once your research is complete, call the submit_factcheck tool exactly once with
     tool = VERDICT_TOOL;
     toolName = "submit_verdict";
     subject = hasCaption
-      ? `Below is the caption text from an Instagram post advertising a product or service.
+      ? `Below is the text of a social media post (Instagram or Facebook) advertising a product or service.
 
 CAPTION:
 """

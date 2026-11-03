@@ -33,7 +33,8 @@ const FACT_RATINGS = {
 function extractShortcode(url) {
   try {
     const u = new URL(url.trim());
-    if (!/instagram\.com$/.test(u.hostname.replace(/^www\./, ""))) return null;
+    const host = u.hostname.replace(/^(www\.|m\.)/, "");
+    if (!["instagram.com", "facebook.com", "fb.watch"].includes(host)) return null;
     return url.trim();
   } catch {
     return null;
@@ -125,10 +126,17 @@ export default function FactChecker() {
     }
   }
 
-  // One search bar, two kinds of input: an Instagram link goes through the
-  // fetch-the-post flow, anything else is treated as a brand/product name.
+  // One search bar, two kinds of input: an Instagram or Facebook link goes
+  // through the fetch-the-post flow, anything else is treated as typed text
+  // (a brand/product name, or a claim in fact-check mode).
   function looksLikeLink(text) {
-    return /^https?:\/\//i.test(text) || /^www\./i.test(text) || /instagram\.com\//i.test(text);
+    return (
+      /^https?:\/\//i.test(text) ||
+      /^www\./i.test(text) ||
+      /instagram\.com\//i.test(text) ||
+      /facebook\.com\//i.test(text) ||
+      /fb\.watch\//i.test(text)
+    );
   }
 
   async function handleSubmit() {
@@ -150,7 +158,7 @@ export default function FactChecker() {
     const clean = extractShortcode(linkText);
     if (!clean) {
       setStage("error");
-      setErrorMessage("Links need to be Instagram posts. To look up anything else, just type the brand name.");
+      setErrorMessage("Links need to be Instagram or Facebook posts. To check anything else, just type it instead.");
       return;
     }
 
@@ -245,11 +253,11 @@ export default function FactChecker() {
             {mode === "product" ? (
               <p className="text-sm leading-relaxed opacity-80">
                 Type a <strong>brand or product name</strong>, or paste a link to an{" "}
-                <strong>Instagram post</strong>. Either way, we'll research it and tell you if it's worth buying.
+                <strong>Instagram or Facebook post</strong>. Either way, we'll research it and tell you if it's worth buying.
               </p>
             ) : (
               <p className="text-sm leading-relaxed opacity-80">
-                Paste a link to an <strong>Instagram post</strong> where someone makes a claim — about an event, a
+                Paste a link to an <strong>Instagram or Facebook post</strong> where someone makes a claim — about an event, a
                 health tip, anything — or <strong>type the claim</strong> itself. We'll check it against reliable
                 sources and tell you if it's true.
               </p>
@@ -268,8 +276,8 @@ export default function FactChecker() {
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder={
                     mode === "product"
-                      ? "Type a brand name or paste an Instagram link"
-                      : "Paste an Instagram link, or type the claim you heard"
+                      ? "Type a brand name or paste an Instagram or Facebook link"
+                      : "Paste an Instagram or Facebook link, or type the claim you heard"
                   }
                   maxLength={500}
                   disabled={busy}
@@ -382,8 +390,8 @@ export default function FactChecker() {
             <SectionLabel index="B" title="One More Thing" />
             <div className="mt-4 space-y-3">
               <p className="text-sm leading-relaxed">
-                Instagram didn't share this post's caption automatically — it happens on some posts. No problem,
-                grab it yourself:
+                That post's text couldn't be read automatically — it happens on some posts, especially private or
+                friends-only ones. No problem, grab it yourself:
               </p>
               {mode === "factcheck" && (
                 <p className="text-sm leading-relaxed" style={{ color: RUST }}>
@@ -392,7 +400,7 @@ export default function FactChecker() {
                 </p>
               )}
               <ol className="text-sm leading-relaxed list-decimal list-inside space-y-1 opacity-80">
-                <li>Open the post on Instagram (link below).</li>
+                <li>Open the post (link below).</li>
                 <li>Copy the caption text.</li>
                 <li>Paste it in the box and hit Continue.</li>
               </ol>
@@ -404,7 +412,7 @@ export default function FactChecker() {
                   className="text-xs font-medium hover:underline flex items-center gap-1"
                   style={{ color: INK }}
                 >
-                  Open post on Instagram <ExternalLink size={12} />
+                  Open the post <ExternalLink size={12} />
                 </a>
                 <button
                   onClick={async () => {
