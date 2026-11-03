@@ -1,7 +1,7 @@
 {
-  "name": "ADJury",
-  "short_name": "ADJury",
-  "description": "A dossier for every product someone tagged you in.",
+  "name": "Fact Jury",
+  "short_name": "Fact Jury",
+  "description": "Twelve noses. Zero patience for nonsense.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#EEEBE2",

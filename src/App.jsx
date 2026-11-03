@@ -30,6 +30,14 @@ const FACT_RATINGS = {
   "Can't Verify": { color: SLATE, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
 };
 
+// Captions for the animated jury banner, by stage.
+const JURY_CAPTIONS = {
+  idle: ["THE JURY, DELIBERATING", "In session while you state your case."],
+  fetching: ["THE JURY IS SEATED", "Fetching the post…"],
+  researching: ["THE JURY IS DELIBERATING", "Reviewing the evidence…"],
+  "need-caption": ["THE JURY NEEDS THE TEXT", "One juror is asking for the caption."],
+};
+
 function extractShortcode(url) {
   try {
     const u = new URL(url.trim());
@@ -194,6 +202,22 @@ export default function FactChecker() {
 
   const busy = stage === "fetching" || stage === "researching";
 
+  // Which Reading illustration the verdict earns: celebration, outrage, or
+  // the split-decision shrug.
+  const juryMood = verdictMeta
+    ? research.verdict_label === "Great Buy"
+      ? "good"
+      : research.verdict_label === "Decent"
+        ? "neutral"
+        : "bad"
+    : factMeta
+      ? ["True", "Mostly True"].includes(research.rating)
+        ? "good"
+        : ["Mixed", "Can't Verify"].includes(research.rating)
+          ? "neutral"
+          : "bad"
+      : null;
+
   return (
     <div style={{ background: PAPER, color: INK, minHeight: "100%", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }} className="w-full">
       <style>{`
@@ -205,9 +229,9 @@ export default function FactChecker() {
         <div className="max-w-3xl mx-auto px-6 py-7 flex items-baseline justify-between">
           <div>
             <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-3xl font-bold tracking-tight">
-              ADJury
+              Fact Jury
             </h1>
-            <p className="text-xs mt-1 opacity-70">A dossier for every product someone tagged you in.</p>
+            <p className="text-xs mt-1 opacity-70">Twelve noses. Zero patience for nonsense.</p>
           </div>
           <FileWarning size={28} strokeWidth={1.5} style={{ color: RUST }} />
         </div>
@@ -222,6 +246,25 @@ export default function FactChecker() {
           Every verdict cites its sources <span className="opacity-50">·</span> No account, nothing stored{" "}
           <span className="opacity-50">·</span> Claims and products judged, never people
         </p>
+
+        {/* The jury banner: animated deliberation, in session from the
+            moment the page loads until the findings take over */}
+        {stage !== "done" && stage !== "error" && (
+          <section className="border-2 bg-white" style={{ borderColor: INK }}>
+            <img
+              src="/jury/deliberation.webp"
+              alt="The Fact Jury at work — taking notes and arguing over the evidence"
+              className="w-full block"
+            />
+            <div
+              className="flex flex-wrap justify-between gap-x-3 px-3 py-2 border-t-2"
+              style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
+            >
+              <span className="text-[11px] font-semibold tracking-widest">{JURY_CAPTIONS[stage][0]}</span>
+              <span className="text-[11px] opacity-70">{JURY_CAPTIONS[stage][1]}</span>
+            </div>
+          </section>
+        )}
 
         {/* Exhibit A: intake */}
         <section>
@@ -371,15 +414,44 @@ export default function FactChecker() {
                   <p className="text-xs opacity-60">4 sources · NIH · Cleveland Clinic · Mayo Clinic · +1</p>
                 </div>
               </div>
+
+              <div className="mt-8">
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Possible outcomes</p>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <figure className="border-2 bg-white m-0" style={{ borderColor: INK }}>
+                    <img src="/jury/reading-good.webp" alt="The jury celebrates a cleared verdict" className="w-full block" />
+                    <figcaption className="px-2.5 py-1.5 border-t-2 text-[11px]" style={{ borderColor: INK }}>
+                      <span className="font-semibold tracking-widest">CLEARED</span>{" "}
+                      <span className="opacity-70">— the jury approves</span>
+                    </figcaption>
+                  </figure>
+                  <figure className="border-2 bg-white m-0" style={{ borderColor: INK }}>
+                    <img src="/jury/reading-bad.webp" alt="The jury reacts with outrage to a guilty verdict" className="w-full block" />
+                    <figcaption className="px-2.5 py-1.5 border-t-2 text-[11px]" style={{ borderColor: INK }}>
+                      <span className="font-semibold tracking-widest">GUILTY</span>{" "}
+                      <span className="opacity-70">— the jury does not</span>
+                    </figcaption>
+                  </figure>
+                </div>
+              </div>
             </section>
 
             <section>
               <SectionLabel index="C" title="How We Check" />
-              <ol className="mt-3 text-sm leading-relaxed list-decimal list-inside space-y-1.5 opacity-90">
-                <li>We read the post, then research the open web — official records and reputable reporting first.</li>
-                <li>For health claims, we weigh the mainstream medical consensus, not whoever posted loudest.</li>
-                <li>An AI analyst weighs the evidence and files the verdict. Every claim in it links to a source you can open.</li>
-              </ol>
+              <div className="mt-3 grid sm:grid-cols-[1fr_260px] gap-5 items-start">
+                <ol className="text-sm leading-relaxed list-decimal list-inside space-y-1.5 opacity-90">
+                  <li>We read the post, then research the open web — official records and reputable reporting first.</li>
+                  <li>For health claims, we weigh the mainstream medical consensus, not whoever posted loudest.</li>
+                  <li>An AI analyst weighs the evidence and files the verdict. Every claim in it links to a source you can open.</li>
+                </ol>
+                <figure className="border-2 bg-white m-0" style={{ borderColor: INK }}>
+                  <img src="/jury/gavel.webp" alt="The judge brings down the gavel" className="w-full block" />
+                  <figcaption className="px-2.5 py-1.5 border-t-2 text-[11px]" style={{ borderColor: INK }}>
+                    <span className="font-semibold tracking-widest">THE GAVEL</span>{" "}
+                    <span className="opacity-70">— it falls exactly once per verdict.</span>
+                  </figcaption>
+                </figure>
+              </div>
             </section>
           </>
         )}
@@ -467,6 +539,29 @@ export default function FactChecker() {
         {stage === "done" && research && (verdictMeta || factMeta) && (
           <section>
             <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
+
+            {juryMood && (
+              <figure className="mt-4 border-2 bg-white" style={{ borderColor: INK }}>
+                <img
+                  src={`/jury/reading-${juryMood}.webp`}
+                  alt="The jury reads its verdict"
+                  className="w-full block"
+                />
+                <figcaption
+                  className="px-3 py-2 border-t-2 text-[11px]"
+                  style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
+                >
+                  <span className="font-semibold tracking-widest">THE JURY HAS REACHED A VERDICT</span>{" "}
+                  <span className="opacity-70">
+                    {juryMood === "good"
+                      ? "They approve."
+                      : juryMood === "bad"
+                        ? "They do not approve."
+                        : "A split decision — the fine print is below."}
+                  </span>
+                </figcaption>
+              </figure>
+            )}
 
             {verdictMeta && (
             <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
