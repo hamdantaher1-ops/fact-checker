@@ -19,6 +19,8 @@
 // set, rate limiting is skipped entirely (the app still works, just
 // unprotected against abuse).
 
+import { createHash } from "node:crypto";
+
 const DAILY_LIMIT = 5;
 
 function stripFences(text) {
@@ -71,6 +73,64 @@ async function checkAndIncrementDailyCount(ip) {
   }
 
   return { enforced: true, allowed: typeof count === "number" && count <= DAILY_LIMIT, count };
+}
+
+// --- Result cache -------------------------------------------------------
+// A finished verdict is stored in the same Upstash database and served
+// back for repeat checks of the same product or claim (7 days). Repeat
+// lookups are common — popular products, and every visitor who taps the
+// same "worth comparing to" alternative — and a cached answer returns in
+// milliseconds instead of re-running the whole research pipeline. Cache
+// hits do not consume the visitor's daily quota. Everything fails open:
+// if the cache is unreachable, the request just runs the research as
+// before.
+
+const CACHE_TTL_SECONDS = 604800; // 7 days
+
+function getUpstashConfig() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url, token } : null;
+}
+
+function cacheKeyFor(isFactCheck, caption, query) {
+  const basis =
+    typeof caption === "string" && caption.trim()
+      ? `caption:${caption.trim().replace(/\s+/g, " ")}`
+      : `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
+  return `verdict-cache:v1:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+}
+
+async function readCache(key) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return null;
+  try {
+    const r = await fetch(`${cfg.url}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const data = await r.json();
+    if (typeof data?.result === "string" && data.result) {
+      return JSON.parse(data.result);
+    }
+  } catch {
+    // best-effort — a cache failure just means the research runs
+  }
+  return null;
+}
+
+async function writeCache(key, value) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return;
+  try {
+    await fetch(cfg.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(["SET", key, JSON.stringify(value), "EX", String(CACHE_TTL_SECONDS)]),
+    });
+  } catch {
+    // best-effort — a failed write only costs the next visitor a re-run
+  }
 }
 
 const VERDICT_TOOL = {
@@ -182,23 +242,6 @@ export default async function handler(req, res) {
     return;
   }
 
-  const ip = getClientIp(req);
-  let rateLimit;
-  try {
-    rateLimit = await checkAndIncrementDailyCount(ip);
-  } catch (err) {
-    // If the rate limiter itself fails (e.g. Upstash is briefly down),
-    // fail open rather than blocking every user's research.
-    rateLimit = { enforced: false, allowed: true, count: 0 };
-  }
-  if (!rateLimit.allowed) {
-    res.status(429).json({
-      error: `You've used all ${DAILY_LIMIT} free researches for today. Try again tomorrow.`,
-      dailyLimit: DAILY_LIMIT,
-    });
-    return;
-  }
-
   // Two ways in: the caption text of an Instagram post, or text typed
   // straight into the search bar (a brand/product name in product mode,
   // a claim in fact-check mode). `mode` selects which kind of research
@@ -217,6 +260,32 @@ export default async function handler(req, res) {
       error: isFactCheck
         ? "That claim is too long — state it in a sentence or two."
         : "That name is too long — keep it to a brand or product name.",
+    });
+    return;
+  }
+
+  // Cache first: a repeat check of the same product or claim is served
+  // from the stored verdict — no daily quota consumed, no research re-run.
+  const cacheKey = cacheKeyFor(isFactCheck, caption, query);
+  const cached = await readCache(cacheKey);
+  if (cached) {
+    res.status(200).json(cached);
+    return;
+  }
+
+  const ip = getClientIp(req);
+  let rateLimit;
+  try {
+    rateLimit = await checkAndIncrementDailyCount(ip);
+  } catch (err) {
+    // If the rate limiter itself fails (e.g. Upstash is briefly down),
+    // fail open rather than blocking every user's research.
+    rateLimit = { enforced: false, allowed: true, count: 0 };
+  }
+  if (!rateLimit.allowed) {
+    res.status(429).json({
+      error: `You've used all ${DAILY_LIMIT} free researches for today. Try again tomorrow.`,
+      dailyLimit: DAILY_LIMIT,
     });
     return;
   }
@@ -298,7 +367,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
         model: "claude-sonnet-4-6",
         max_tokens: 1500,
         messages: [{ role: "user", content: prompt }],
-        tools: [{ type: "web_search_20250305", name: "web_search" }, tool],
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }, tool],
       }),
     });
     const data = await anthropicRes.json();
@@ -309,6 +378,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
 
     const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === toolName);
     if (toolUse) {
+      await writeCache(cacheKey, toolUse.input);
       res.status(200).json(toolUse.input);
       return;
     }
@@ -322,13 +392,17 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       return;
     }
     try {
-      res.status(200).json(JSON.parse(stripFences(joined)));
+      const parsedText = JSON.parse(stripFences(joined));
+      await writeCache(cacheKey, parsedText);
+      res.status(200).json(parsedText);
       return;
     } catch {
       const match = joined.match(/\{[\s\S]*\}/);
       if (match) {
         try {
-          res.status(200).json(JSON.parse(match[0]));
+          const parsedMatch = JSON.parse(match[0]);
+          await writeCache(cacheKey, parsedMatch);
+          res.status(200).json(parsedMatch);
           return;
         } catch {
           // fall through to the error below
