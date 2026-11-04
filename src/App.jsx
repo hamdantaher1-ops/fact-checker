@@ -226,12 +226,15 @@ export default function FactChecker() {
 
       {/* Masthead */}
       <header className="border-b" style={{ borderColor: PAPER_LINE }}>
-        <div className="max-w-3xl mx-auto px-6 py-7 flex items-baseline justify-between">
-          <div>
+        <div className="max-w-3xl mx-auto px-6 py-7 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <img src="/logo-mark.png" alt="Fact Jury logo" className="h-20 w-auto block" />
+            <div>
             <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-3xl font-bold tracking-tight">
               Fact Jury
             </h1>
             <p className="text-xs mt-1 opacity-70">Unbiased product reviews and fact-checks of what you see on social media.</p>
+            </div>
           </div>
           <FileWarning size={28} strokeWidth={1.5} style={{ color: RUST }} />
         </div>
