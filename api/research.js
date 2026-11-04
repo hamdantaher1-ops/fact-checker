@@ -133,6 +133,31 @@ async function writeCache(key, value) {
   }
 }
 
+async function logUsage(ip, isFactCheck, subjectText, cached, resultLabel) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return;
+  try {
+    const event = JSON.stringify({
+      t: new Date().toISOString(),
+      ip: createHash("sha256").update(ip || "unknown").digest("hex").slice(0, 10),
+      mode: isFactCheck ? "factcheck" : "product",
+      subject: (subjectText || "").replace(/\s+/g, " ").slice(0, 120),
+      cached: !!cached,
+      result: resultLabel || null,
+    });
+    const post = (cmd) =>
+      fetch(cfg.url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(cmd),
+      });
+    await post(["LPUSH", "usage-events", event]);
+    await post(["LTRIM", "usage-events", "0", "199"]);
+  } catch {
+    // best-effort — usage logging must never block a verdict
+  }
+}
+
 const VERDICT_TOOL = {
   name: "submit_verdict",
   description: "Submit the final structured purchase verdict once research is complete. Call this exactly once, as your last action.",
@@ -264,16 +289,18 @@ export default async function handler(req, res) {
     return;
   }
 
+  const ip = getClientIp(req);
+
   // Cache first: a repeat check of the same product or claim is served
   // from the stored verdict — no daily quota consumed, no research re-run.
   const cacheKey = cacheKeyFor(isFactCheck, caption, query);
   const cached = await readCache(cacheKey);
   if (cached) {
+    await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, cached.verdict_label || cached.rating);
     res.status(200).json(cached);
     return;
   }
 
-  const ip = getClientIp(req);
   let rateLimit;
   try {
     rateLimit = await checkAndIncrementDailyCount(ip);
@@ -379,6 +406,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === toolName);
     if (toolUse) {
       await writeCache(cacheKey, toolUse.input);
+      await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
       res.status(200).json(toolUse.input);
       return;
     }
@@ -394,6 +422,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     try {
       const parsedText = JSON.parse(stripFences(joined));
       await writeCache(cacheKey, parsedText);
+      await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
       res.status(200).json(parsedText);
       return;
     } catch {
@@ -402,6 +431,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
         try {
           const parsedMatch = JSON.parse(match[0]);
           await writeCache(cacheKey, parsedMatch);
+          await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
           res.status(200).json(parsedMatch);
           return;
         } catch {
