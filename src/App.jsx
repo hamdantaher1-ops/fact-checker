@@ -70,6 +70,7 @@ export default function FactChecker() {
   const [manualCaption, setManualCaption] = useState("");
   const [clipboardNote, setClipboardNote] = useState("");
   const [research, setResearch] = useState(null);
+  const [prevPage, setPrevPage] = useState(null); // findings we came from via a "worth comparing to" tap
 
   const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
   const factMeta = research?.rating ? FACT_RATINGS[research.rating] : null;
@@ -79,6 +80,7 @@ export default function FactChecker() {
     setMode(next);
     setStage("idle");
     setResearch(null);
+    setPrevPage(null);
     setErrorMessage("");
     setManualCaption("");
     setClipboardNote("");
@@ -101,13 +103,13 @@ export default function FactChecker() {
     return (data.description && data.description.trim()) || (data.title && data.title.trim()) || "";
   }
 
-  async function runResearch(payload) {
+  async function runResearch(payload, modeOverride) {
     setStage("researching");
     try {
       const response = await fetch("/api/research", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode, ...payload }),
+        body: JSON.stringify({ mode: modeOverride ?? mode, ...payload }),
       });
       const raw = await response.text();
       let data;
@@ -160,6 +162,7 @@ export default function FactChecker() {
   async function handleRun(linkText) {
     setErrorMessage("");
     setResearch(null);
+    setPrevPage(null);
     setManualCaption("");
     setClipboardNote("");
 
@@ -191,8 +194,37 @@ export default function FactChecker() {
   async function handleSearchBrand(name) {
     setErrorMessage("");
     setResearch(null);
+    setPrevPage(null);
     setManualCaption("");
     await runResearch({ query: name });
+  }
+
+  // Tapping a "worth comparing to" product opens Fact Jury's own findings
+  // page for it (a fresh product check), keeping the current findings one
+  // tap away via the back link.
+  function openAlternative(alt) {
+    if (!alt?.name || stage === "researching" || stage === "fetching") return;
+    setPrevPage({
+      research,
+      mode,
+      label: research?.product_name || research?.claim || "the previous check",
+    });
+    setMode("product");
+    setErrorMessage("");
+    setManualCaption("");
+    setResearch(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    runResearch({ query: alt.name }, "product");
+  }
+
+  function goBackToPrev() {
+    if (!prevPage) return;
+    setResearch(prevPage.research);
+    setMode(prevPage.mode);
+    setStage("done");
+    setErrorMessage("");
+    setPrevPage(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function handleManualContinue() {
@@ -236,7 +268,6 @@ export default function FactChecker() {
             <p className="text-xs mt-1 opacity-70">Unbiased product reviews and fact-checks of what you see on social media.</p>
             </div>
           </div>
-          <FileWarning size={28} strokeWidth={1.5} style={{ color: RUST }} />
         </div>
       </header>
 
@@ -523,6 +554,17 @@ export default function FactChecker() {
           <section>
             <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
 
+            {prevPage && (
+              <button
+                type="button"
+                onClick={goBackToPrev}
+                className="mt-3 text-xs hover:underline inline-flex items-center gap-1"
+                style={{ color: RUST }}
+              >
+                ← Back to {prevPage.label}
+              </button>
+            )}
+
             {juryMood && (
               <figure className="mt-4 border-2 bg-white" style={{ borderColor: INK }}>
                 <img
@@ -625,24 +667,30 @@ export default function FactChecker() {
 
             {research?.alternatives?.length > 0 && (
               <div className="mt-8">
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Worth comparing to</p>
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth comparing to</p>
+                <p className="text-xs opacity-60 mb-3">Tap one to see Fact Jury&rsquo;s rating of it.</p>
                 <ul className="space-y-3">
                   {research.alternatives.map((alt, i) => (
                     <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                      {alt.url ? (
+                      <button
+                        type="button"
+                        onClick={() => openAlternative(alt)}
+                        className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
+                        style={{ color: INK }}
+                      >
+                        {alt.name} <ChevronRight size={13} className="opacity-50" />
+                      </button>
+                      {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
+                      {alt.url && (
                         <a
                           href={alt.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm font-medium hover:underline inline-flex items-center gap-1"
-                          style={{ color: INK }}
+                          className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
                         >
-                          {alt.name} <ExternalLink size={12} className="opacity-50" />
+                          Maker&rsquo;s page <ExternalLink size={10} />
                         </a>
-                      ) : (
-                        <p className="text-sm font-medium">{alt.name}</p>
                       )}
-                      {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
                     </li>
                   ))}
                 </ul>
