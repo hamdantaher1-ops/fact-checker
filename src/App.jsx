@@ -317,11 +317,6 @@ export default function FactChecker() {
                 <input
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
-                  placeholder={
-                    mode === "product"
-                      ? "Type a brand name or paste an Instagram or Facebook link"
-                      : "Paste an Instagram or Facebook link, or type the claim you heard"
-                  }
                   maxLength={500}
                   disabled={busy}
                   className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
