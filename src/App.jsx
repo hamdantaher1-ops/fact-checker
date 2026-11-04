@@ -32,7 +32,7 @@ const FACT_RATINGS = {
 
 // Captions for the animated jury banner, by stage.
 const JURY_CAPTIONS = {
-  idle: ["THE JURY, DELIBERATING", "In session while you state your case."],
+  idle: ["THE JURY, DELIBERATING", "Reviewing the product against real customer reviews online — gathering the most reliable facts before you buy."],
   fetching: ["THE JURY IS SEATED", "Fetching the post…"],
   researching: ["THE JURY IS DELIBERATING", "Reviewing the evidence…"],
   "need-caption": ["THE JURY NEEDS THE TEXT", "One juror is asking for the caption."],
@@ -422,10 +422,14 @@ export default function FactChecker() {
               <div className="mt-5 border px-3 py-3" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}>
                 <p className="text-xs font-semibold tracking-widest">WHY NOT JUST ASK AN AI CHAT?</p>
                 <p className="text-sm leading-relaxed mt-2">
-                  An AI chat answers from memory — ads, opinions, and invented details in one confident reply, with
-                  nothing you can check. Fact Jury researches every verdict live, and only credible sources count
-                  as evidence: official records, regulators, independent testing, reputable reporting. Sponsored
-                  posts and brand marketing are claims to check, never proof. No brand can pay for a better verdict.
+                  Fact Jury checks the product against real customer reviews online and gathers the most reliable
+                  facts before you buy. Only credible sources count as evidence: official records, regulators,
+                  independent testing, reputable reporting. Sponsored posts and brand marketing are claims to
+                  check, never proof. No brand can pay for a better verdict. An AI chat does none of this — it
+                  doesn't look anything up. It writes an answer from what it learned long ago, and when it doesn't
+                  know something, it can just make it up. It can repeat ads and opinions as if they were facts,
+                  and it sounds sure even when it's wrong. And it shows you no sources, so there's nothing you
+                  can check.
                 </p>
               </div>
             </section>
