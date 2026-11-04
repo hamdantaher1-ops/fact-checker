@@ -93,13 +93,42 @@ function getUpstashConfig() {
   return url && token ? { url, token } : null;
 }
 
-function cacheKeyFor(isFactCheck, caption, query) {
-  const basis =
-    typeof caption === "string" && caption.trim()
-      ? `caption:${caption.trim().replace(/\s+/g, " ")}`
-      : `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+function normalizeLink(link) {
+  try {
+    const u = new URL(link.trim());
+    const host = u.hostname.replace(/^(www\.|m\.)/, "").toLowerCase();
+    const path = u.pathname.replace(/\/+$/, "");
+    return `${host}${path}`;
+  } catch {
+    return link.trim().toLowerCase();
+  }
+}
+
+// The cache key decides what counts as "the same check". A check that came
+// from a post link is keyed on the link itself: the link never changes,
+// while the caption text fetched from the post can come back worded
+// slightly differently between visits (wrapper lines, line breaks), which
+// used to make every repeat of the same ad miss the cache. Typed checks
+// key on the normalized text.
+function cacheKeyFor(isFactCheck, caption, query, link) {
+  let basis;
+  if (typeof link === "string" && link.trim()) {
+    basis = `link:${normalizeLink(link)}`;
+  } else if (typeof caption === "string" && caption.trim()) {
+    const text = caption
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase()
+      // Belt-and-braces: drop an Instagram engagement wrapper if one ever
+      // reaches the key ("12,345 Likes, 678 Comments - user on Instagram: \"…\"")
+      .replace(/^[\d,.]+\s+likes?,\s*[\d,.]+\s+comments?\s+-\s+.*?on instagram:\s*"/, "")
+      .replace(/"$/, "");
+    basis = `caption:${text}`;
+  } else {
+    basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+  }
   const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v1:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return `verdict-cache:v2:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 async function readCache(key) {
@@ -272,7 +301,7 @@ export default async function handler(req, res) {
   // a claim in fact-check mode). `mode` selects which kind of research
   // runs; anything other than "factcheck" is treated as product mode, so
   // older clients keep working.
-  const { caption, query, mode } = req.body || {};
+  const { caption, query, mode, link } = req.body || {};
   const isFactCheck = mode === "factcheck";
   const hasCaption = typeof caption === "string" && caption.trim().length > 0;
   const hasQuery = typeof query === "string" && query.trim().length > 0;
@@ -293,7 +322,7 @@ export default async function handler(req, res) {
 
   // Cache first: a repeat check of the same product or claim is served
   // from the stored verdict — no daily quota consumed, no research re-run.
-  const cacheKey = cacheKeyFor(isFactCheck, caption, query);
+  const cacheKey = cacheKeyFor(isFactCheck, caption, query, link);
   const cached = await readCache(cacheKey);
   if (cached) {
     await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, cached.verdict_label || cached.rating);

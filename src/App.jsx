@@ -177,7 +177,7 @@ export default function FactChecker() {
     try {
       const caption = await fetchCaption(clean);
       if (caption) {
-        await runResearch({ caption });
+        await runResearch({ caption, link: clean });
       } else {
         setStage("need-caption");
       }
