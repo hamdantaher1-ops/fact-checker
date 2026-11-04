@@ -284,15 +284,14 @@ export default function FactChecker() {
         {/* The jury banner: animated deliberation, in session from the
             moment the page loads until the findings take over */}
         {stage !== "done" && stage !== "error" && (
-          <section className="border-2 bg-white" style={{ borderColor: INK }}>
+          <section style={{ background: PAPER }}>
             <img
               src="/jury/deliberation.gif"
               alt="The Fact Jury at work — taking notes and arguing over the evidence"
               className="w-full block"
             />
             <div
-              className="flex flex-wrap justify-between gap-x-3 px-3 py-2 border-t-2"
-              style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
+              className="flex flex-wrap justify-between gap-x-3 px-3 py-2"
             >
               <span className="text-[11px] font-semibold tracking-widest">{JURY_CAPTIONS[stage][0]}</span>
               <span className="text-[11px] opacity-70">{JURY_CAPTIONS[stage][1]}</span>
@@ -566,7 +565,7 @@ export default function FactChecker() {
             )}
 
             {juryMood && (
-              <figure className="mt-4 border-2 bg-white" style={{ borderColor: INK }}>
+              <figure className="mt-4 border-2" style={{ borderColor: INK, background: PAPER }}>
                 <img
                   src={`/jury/reading-${juryMood}.gif`}
                   alt="The jury reads its verdict"
