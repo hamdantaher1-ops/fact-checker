@@ -231,7 +231,7 @@ export default function FactChecker() {
             <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-3xl font-bold tracking-tight">
               Fact Jury
             </h1>
-            <p className="text-xs mt-1 opacity-70">Twelve noses. Zero patience for nonsense.</p>
+            <p className="text-xs mt-1 opacity-70">Unbiased product reviews and fact-checks of what you see on social media.</p>
           </div>
           <FileWarning size={28} strokeWidth={1.5} style={{ color: RUST }} />
         </div>
@@ -370,14 +370,16 @@ export default function FactChecker() {
                 >
                   <ShieldAlert size={22} className="mx-auto mb-1" />
                   <div className="text-lg font-bold tracking-wider leading-none">MIXED</div>
-                  <div className="text-[10px] mt-1 tracking-wide">DECENT</div>
                 </div>
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product</p>
                     <p className="text-sm font-medium">TurboTax — the “free” tax filing</p>
                   </div>
-                  <WorthBar score={5} color={AMBER} />
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth-it score — 5/10</p>
+                    <WorthBar score={5} color={AMBER} />
+                  </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
                     <p className="text-sm leading-relaxed">
@@ -397,7 +399,6 @@ export default function FactChecker() {
                 >
                   <ShieldAlert size={22} className="mx-auto mb-1" />
                   <div className="text-lg font-bold tracking-wider leading-none">MISLEADING</div>
-                  <div className="text-[10px] mt-1 tracking-wide">THE CLAIM</div>
                 </div>
                 <div className="space-y-4">
                   <div>
@@ -423,6 +424,15 @@ export default function FactChecker() {
                 <li>For health claims, we weigh the mainstream medical consensus, not whoever posted loudest.</li>
                 <li>An AI analyst weighs the evidence and files the verdict. Every claim in it links to a source you can open.</li>
               </ol>
+              <div className="mt-5 border px-3 py-3" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}>
+                <p className="text-xs font-semibold tracking-widest">WHY NOT JUST ASK AN AI CHAT?</p>
+                <p className="text-sm leading-relaxed mt-2">
+                  An AI chat answers from memory — ads, opinions, and invented details in one confident reply, with
+                  nothing you can check. Fact Jury researches every verdict live, and only credible sources count
+                  as evidence: official records, regulators, independent testing, reputable reporting. Sponsored
+                  posts and brand marketing are claims to check, never proof. No brand can pay for a better verdict.
+                </p>
+              </div>
             </section>
           </>
         )}
@@ -514,7 +524,7 @@ export default function FactChecker() {
             {juryMood && (
               <figure className="mt-4 border-2 bg-white" style={{ borderColor: INK }}>
                 <img
-                  src={`/jury/reading-${juryMood}.png`}
+                  src={`/jury/reading-${juryMood}.gif`}
                   alt="The jury reads its verdict"
                   className="w-full block"
                 />
@@ -546,7 +556,6 @@ export default function FactChecker() {
               >
                 <verdictMeta.Icon size={22} className="mx-auto mb-1" />
                 <div className="text-lg font-bold tracking-wider leading-none">{verdictMeta.label}</div>
-                <div className="text-[10px] mt-1 tracking-wide">{research.verdict_label.toUpperCase()}</div>
               </div>
 
               <div className="space-y-4">
@@ -582,7 +591,6 @@ export default function FactChecker() {
                 >
                   <factMeta.Icon size={22} className="mx-auto mb-1" />
                   <div className="text-lg font-bold tracking-wider leading-none">{factMeta.label}</div>
-                  <div className="text-[10px] mt-1 tracking-wide">{research.rating.toUpperCase()}</div>
                 </div>
 
                 <div className="space-y-4">
@@ -619,7 +627,19 @@ export default function FactChecker() {
                 <ul className="space-y-3">
                   {research.alternatives.map((alt, i) => (
                     <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                      <p className="text-sm font-medium">{alt.name}</p>
+                      {alt.url ? (
+                        <a
+                          href={alt.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm font-medium hover:underline inline-flex items-center gap-1"
+                          style={{ color: INK }}
+                        >
+                          {alt.name} <ExternalLink size={12} className="opacity-50" />
+                        </a>
+                      ) : (
+                        <p className="text-sm font-medium">{alt.name}</p>
+                      )}
                       {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
                     </li>
                   ))}

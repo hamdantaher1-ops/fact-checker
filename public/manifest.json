@@ -1,7 +1,7 @@
 {
   "name": "Fact Jury",
   "short_name": "Fact Jury",
-  "description": "Twelve noses. Zero patience for nonsense.",
+  "description": "Unbiased product reviews and fact-checks of what you see on social media.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#EEEBE2",

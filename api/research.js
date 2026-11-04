@@ -97,8 +97,12 @@ const VERDICT_TOOL = {
           properties: {
             name: { type: "string" },
             reason: { type: "string" },
+            url: {
+              type: "string",
+              description: "A real link from your research for this alternative — its official product page or a credible independent review/comparison of it. Never invent a URL; if you have no real link for an alternative, leave that alternative out.",
+            },
           },
-          required: ["name", "reason"],
+          required: ["name", "reason", "url"],
         },
       },
       sources: {
@@ -276,7 +280,7 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
 
 1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
-3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality.
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — its official product page or a credible independent review of it — never an invented URL.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
