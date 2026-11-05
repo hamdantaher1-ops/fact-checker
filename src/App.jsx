@@ -319,8 +319,9 @@ export default function FactChecker() {
             </div>
             {mode === "product" ? (
               <p className="text-sm leading-relaxed opacity-80">
-                Type a <strong>brand or product name</strong>, or paste a link to an{" "}
-                <strong>Instagram or Facebook post</strong>. Either way, we'll research it and tell you if it's worth buying.
+                Paste an <strong>Instagram or Facebook ad link</strong>, or type a <strong>brand or product name</strong>,
+                and we'll tell you if it's worth your money or time. Or if you wanted, switch modes and we'll
+                fact-check the claim in any post.
               </p>
             ) : (
               <p className="text-sm leading-relaxed opacity-80">
