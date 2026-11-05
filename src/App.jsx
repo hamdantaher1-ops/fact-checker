@@ -272,15 +272,6 @@ export default function FactChecker() {
       </header>
 
       <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
-        {/* Case facts: one line — sources, privacy, fairness */}
-        <p
-          className="text-xs sm:text-[13px] leading-relaxed border px-3 py-2.5"
-          style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}
-        >
-          Every verdict cites its sources <span className="opacity-50">·</span> No account, nothing stored{" "}
-          <span className="opacity-50">·</span> Claims and products judged, never people
-        </p>
-
         {/* The jury banner: animated deliberation, in session from the
             moment the page loads until the findings take over */}
         {stage !== "done" && stage !== "error" && (
@@ -376,6 +367,15 @@ export default function FactChecker() {
                 )}
               </button>
             </form>
+
+            {/* Case facts: one line — sources, privacy, fairness */}
+            <p
+              className="text-xs sm:text-[13px] leading-relaxed border px-3 py-2.5"
+              style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}
+            >
+              Every verdict cites its sources <span className="opacity-50">·</span> No account, nothing stored{" "}
+              <span className="opacity-50">·</span> Claims and products judged, never people
+            </p>
 
             {stage === "error" && (
               <p className="text-sm" style={{ color: RUST }}>
