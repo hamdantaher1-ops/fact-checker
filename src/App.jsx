@@ -275,6 +275,7 @@ export default function FactChecker() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap');
       `}</style>
+      <InkFilterDefs />
 
       {/* Masthead */}
       <header className="border-b" style={{ borderColor: PAPER_LINE }}>
@@ -413,21 +414,17 @@ export default function FactChecker() {
             <section>
               <SectionLabel index="B" title="What a Filing Looks Like" />
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <div
-                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
-                  style={{ borderColor: AMBER, color: AMBER, transform: "rotate(3deg)" }}
-                >
-                  <ShieldAlert size={22} className="mx-auto mb-1" />
-                  <div className="text-lg font-bold tracking-wider leading-none">MIXED</div>
+                <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
+                  <InkStamp color={AMBER} rotate="3deg" label="MIXED" />
+                  <div className="w-full min-w-[132px]">
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth-it score — 5/10</p>
+                    <WorthBar score={5} color={AMBER} />
+                  </div>
                 </div>
                 <div className="space-y-3">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product</p>
                     <p className="text-sm font-medium">TurboTax — the “free” tax filing</p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth-it score — 5/10</p>
-                    <WorthBar score={5} color={AMBER} />
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
@@ -442,13 +439,7 @@ export default function FactChecker() {
               </div>
 
               <div className="mt-8 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <div
-                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
-                  style={{ borderColor: RUST, color: RUST, transform: "rotate(4deg)" }}
-                >
-                  <ShieldAlert size={22} className="mx-auto mb-1" />
-                  <div className="text-lg font-bold tracking-wider leading-none">MISLEADING</div>
-                </div>
+                <InkStamp color={RUST} rotate="4deg" label="MISLEADING" />
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">The claim</p>
@@ -610,29 +601,20 @@ export default function FactChecker() {
 
             {verdictMeta && (
             <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-              <div
-                className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
-                style={{
-                  borderColor: verdictMeta.color,
-                  color: verdictMeta.color,
-                  transform: `rotate(${verdictMeta.rotate})`,
-                }}
-              >
-                <verdictMeta.Icon size={22} className="mx-auto mb-1" />
-                <div className="text-lg font-bold tracking-wider leading-none">{verdictMeta.label}</div>
+              <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
+                <InkStamp color={verdictMeta.color} rotate={verdictMeta.rotate} label={verdictMeta.label} />
+                <div className="w-full min-w-[132px]">
+                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                    Worth-it score — {research.worth_it_score}/10
+                  </p>
+                  <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
+                </div>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
                   <p className="text-sm font-medium">{research.product_name}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
-                    Worth-it score — {research.worth_it_score}/10
-                  </p>
-                  <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
                 </div>
 
                 <div>
@@ -645,17 +627,7 @@ export default function FactChecker() {
 
             {factMeta && (
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <div
-                  className="border-4 px-4 py-3 text-center select-none shrink-0 mx-auto sm:mx-0"
-                  style={{
-                    borderColor: factMeta.color,
-                    color: factMeta.color,
-                    transform: `rotate(${factMeta.rotate})`,
-                  }}
-                >
-                  <factMeta.Icon size={22} className="mx-auto mb-1" />
-                  <div className="text-lg font-bold tracking-wider leading-none">{factMeta.label}</div>
-                </div>
+                <InkStamp color={factMeta.color} rotate={factMeta.rotate} label={factMeta.label} />
 
                 <div className="space-y-4">
                   <div>
@@ -770,6 +742,39 @@ function SectionLabel({ index, title }) {
         {title}
       </h2>
     </div>
+  );
+}
+
+// "Inked & Aged" verdict stamp (Taher's pick, Nov 6): a worn rubber-stamp
+// impression — mono word in a 3px rule whose edges are roughened by the
+// inkRoughen SVG displacement filter, no icon. The worth-it score never
+// sits inside the stamp; it prints underneath it.
+function InkStamp({ color, rotate, label }) {
+  return (
+    <div
+      className="px-4 py-2.5 text-center select-none shrink-0"
+      style={{
+        border: `3px solid ${color}`,
+        color,
+        transform: `rotate(${rotate})`,
+        filter: "url(#inkRoughen)",
+      }}
+    >
+      <div className="text-xl font-bold tracking-[0.18em] leading-none">{label}</div>
+    </div>
+  );
+}
+
+function InkFilterDefs() {
+  return (
+    <svg aria-hidden="true" className="absolute w-0 h-0">
+      <defs>
+        <filter id="inkRoughen">
+          <feTurbulence type="fractalNoise" baseFrequency="0.12" numOctaves="3" seed="7" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="3.2" />
+        </filter>
+      </defs>
+    </svg>
   );
 }
 
