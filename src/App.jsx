@@ -14,20 +14,30 @@ const GREEN = "#2F6B4F";
 const AMBER = "#B27A16";
 const SLATE = "#6B6459";
 
+// Faded-ink stamp palette (Taher's pick, Nov 6): washed, dusty versions of
+// the verdict colors so the stamps sit quietly on the paper instead of
+// shouting. Used only by the InkStamp and its score bar underneath.
+const STAMP_GREEN = "#5A7D68";
+const STAMP_SAGE = "#879A85";
+const STAMP_OCHRE = "#A99868";
+const STAMP_CLAY = "#AC856A";
+const STAMP_TERRA = "#9E6B5E";
+const STAMP_GREY = "#8A8378";
+
 const VERDICTS = {
-  "Great Buy": { color: GREEN, label: "APPROVED", Icon: ShieldCheck, rotate: "-6deg" },
-  "Decent": { color: AMBER, label: "MIXED", Icon: ShieldAlert, rotate: "3deg" },
-  "Skip It": { color: SLATE, label: "PASS", Icon: Ban, rotate: "-4deg" },
-  "Avoid": { color: RUST, label: "AVOID", Icon: ShieldX, rotate: "5deg" },
+  "Great Buy": { color: GREEN, stamp: STAMP_GREEN, label: "APPROVED", Icon: ShieldCheck, rotate: "-6deg" },
+  "Decent": { color: AMBER, stamp: STAMP_OCHRE, label: "MIXED", Icon: ShieldAlert, rotate: "3deg" },
+  "Skip It": { color: SLATE, stamp: STAMP_GREY, label: "PASS", Icon: Ban, rotate: "-4deg" },
+  "Avoid": { color: RUST, stamp: STAMP_TERRA, label: "AVOID", Icon: ShieldX, rotate: "5deg" },
 };
 
 const FACT_RATINGS = {
-  "True": { color: GREEN, label: "TRUE", Icon: ShieldCheck, rotate: "-6deg" },
-  "Mostly True": { color: GREEN, label: "MOSTLY TRUE", Icon: ShieldCheck, rotate: "3deg" },
-  "Mixed": { color: AMBER, label: "MIXED", Icon: ShieldAlert, rotate: "-4deg" },
-  "Misleading": { color: RUST, label: "MISLEADING", Icon: ShieldAlert, rotate: "4deg" },
-  "False": { color: RUST, label: "FALSE", Icon: ShieldX, rotate: "-5deg" },
-  "Can't Verify": { color: SLATE, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
+  "True": { color: GREEN, stamp: STAMP_GREEN, label: "TRUE", Icon: ShieldCheck, rotate: "-6deg" },
+  "Mostly True": { color: GREEN, stamp: STAMP_SAGE, label: "MOSTLY TRUE", Icon: ShieldCheck, rotate: "3deg" },
+  "Mixed": { color: AMBER, stamp: STAMP_OCHRE, label: "MIXED", Icon: ShieldAlert, rotate: "-4deg" },
+  "Misleading": { color: RUST, stamp: STAMP_CLAY, label: "MISLEADING", Icon: ShieldAlert, rotate: "4deg" },
+  "False": { color: RUST, stamp: STAMP_TERRA, label: "FALSE", Icon: ShieldX, rotate: "-5deg" },
+  "Can't Verify": { color: SLATE, stamp: STAMP_GREY, label: "UNVERIFIED", Icon: FileWarning, rotate: "3deg" },
 };
 
 // Captions for the animated jury banner, by stage.
@@ -415,10 +425,10 @@ export default function FactChecker() {
               <SectionLabel index="B" title="What a Filing Looks Like" />
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
                 <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
-                  <InkStamp color={AMBER} rotate="3deg" label="MIXED" />
+                  <InkStamp color={STAMP_OCHRE} rotate="3deg" label="MIXED" />
                   <div className="w-full min-w-[132px]">
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth-it score — 5/10</p>
-                    <WorthBar score={5} color={AMBER} />
+                    <WorthBar score={5} color={STAMP_OCHRE} />
                   </div>
                 </div>
                 <div className="space-y-3">
@@ -439,7 +449,7 @@ export default function FactChecker() {
               </div>
 
               <div className="mt-8 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <InkStamp color={RUST} rotate="4deg" label="MISLEADING" />
+                <InkStamp color={STAMP_CLAY} rotate="4deg" label="MISLEADING" />
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">The claim</p>
@@ -602,12 +612,12 @@ export default function FactChecker() {
             {verdictMeta && (
             <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
               <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
-                <InkStamp color={verdictMeta.color} rotate={verdictMeta.rotate} label={verdictMeta.label} />
+                <InkStamp color={verdictMeta.stamp} rotate={verdictMeta.rotate} label={verdictMeta.label} />
                 <div className="w-full min-w-[132px]">
                   <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
                     Worth-it score — {research.worth_it_score}/10
                   </p>
-                  <WorthBar score={research.worth_it_score} color={verdictMeta.color} />
+                  <WorthBar score={research.worth_it_score} color={verdictMeta.stamp} />
                 </div>
               </div>
 
@@ -627,7 +637,7 @@ export default function FactChecker() {
 
             {factMeta && (
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <InkStamp color={factMeta.color} rotate={factMeta.rotate} label={factMeta.label} />
+                <InkStamp color={factMeta.stamp} rotate={factMeta.rotate} label={factMeta.label} />
 
                 <div className="space-y-4">
                   <div>
@@ -754,8 +764,9 @@ function InkStamp({ color, rotate, label }) {
     <div
       className="px-4 py-2.5 text-center select-none shrink-0"
       style={{
-        border: `3px solid ${color}`,
+        border: `2.6px solid ${color}`,
         color,
+        opacity: 0.88,
         transform: `rotate(${rotate})`,
         filter: "url(#inkRoughen)",
       }}
