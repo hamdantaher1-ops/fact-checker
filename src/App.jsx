@@ -14,15 +14,16 @@ const GREEN = "#2F6B4F";
 const AMBER = "#B27A16";
 const SLATE = "#6B6459";
 
-// Faded-ink stamp palette (Taher's pick, Nov 6): washed, dusty versions of
-// the verdict colors so the stamps sit quietly on the paper instead of
-// shouting. Used only by the InkStamp and its score bar underneath.
-const STAMP_GREEN = "#5A7D68";
-const STAMP_SAGE = "#879A85";
-const STAMP_OCHRE = "#A99868";
-const STAMP_CLAY = "#AC856A";
-const STAMP_TERRA = "#9E6B5E";
-const STAMP_GREY = "#8A8378";
+// Deeper-ink stamp palette ("Option B", Taher's final pick, Nov 6): dusty
+// versions of the verdict colors pressed one shade deeper, so the stamp
+// stands out from the paper without shouting. Used only by the InkStamp
+// and its score bar underneath.
+const STAMP_GREEN = "#3E5C4B";
+const STAMP_SAGE = "#677D5F";
+const STAMP_OCHRE = "#8A743F";
+const STAMP_CLAY = "#96603F";
+const STAMP_TERRA = "#8C4A3E";
+const STAMP_GREY = "#5C564C";
 
 const VERDICTS = {
   "Great Buy": { color: GREEN, stamp: STAMP_GREEN, label: "APPROVED", Icon: ShieldCheck, rotate: "-6deg" },
@@ -764,9 +765,9 @@ function InkStamp({ color, rotate, label }) {
     <div
       className="px-4 py-2.5 text-center select-none shrink-0"
       style={{
-        border: `2.6px solid ${color}`,
+        border: `3.2px solid ${color}`,
         color,
-        opacity: 0.88,
+        boxShadow: "2px 3px 0 rgba(28,42,51,0.08)",
         transform: `rotate(${rotate})`,
         filter: "url(#inkRoughen)",
       }}
