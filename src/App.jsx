@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Stamp } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -62,7 +62,16 @@ function stripFences(text) {
 // idle -> fetching -> (need-caption -> researching) | researching -> done
 //                   \-> error (from any step)
 export default function FactChecker() {
-  const [searchText, setSearchText] = useState("");
+  // Deep-link prefill: the iOS app's share sheet lands people on
+  // factjury.com/?link=<shared post URL>. Pre-fill the search box with it
+  // (product mode); the effect below then starts the check automatically.
+  const [searchText, setSearchText] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("link")?.trim() || "";
+    } catch {
+      return "";
+    }
+  });
   const [mode, setMode] = useState("product"); // product | factcheck
 
   const [stage, setStage] = useState("idle"); // idle | fetching | need-caption | researching | done | error
@@ -233,6 +242,17 @@ export default function FactChecker() {
   }
 
   const busy = stage === "fetching" || stage === "researching";
+
+  // Opened with ?link= (e.g. handed over by the Fact Jury app's share
+  // extension): pre-fill the box and start the check automatically.
+  useEffect(() => {
+    const shared = new URLSearchParams(window.location.search).get("link");
+    if (shared && looksLikeLink(shared)) {
+      setSearchText(shared);
+      handleRun(/^https?:\/\//i.test(shared) ? shared : `https://${shared}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Which Reading illustration the verdict earns: celebration, outrage, or
   // the split-decision shrug.
