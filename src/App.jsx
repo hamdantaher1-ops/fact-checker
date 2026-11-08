@@ -829,7 +829,7 @@ export default function FactChecker() {
                             rel="noopener noreferrer"
                             className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
                           >
-                            See it at the maker / store <ExternalLink size={10} />
+                            {storeLabel(alt.url)} <ExternalLink size={10} />
                           </a>
                         )}
                       </div>
@@ -911,6 +911,15 @@ function SectionLabel({ index, title }) {
 // impression — mono word in a 3px rule whose edges are roughened by the
 // inkRoughen SVG displacement filter, no icon. The worth-it score never
 // sits inside the stamp; it prints underneath it.
+function storeLabel(url) {
+  try {
+    if (/amazon\./i.test(new URL(url).hostname)) return "See it on Amazon";
+  } catch {
+    // not a parseable URL — fall through to the generic label
+  }
+  return "See it at the maker / store";
+}
+
 function JuryChat({ verdict }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");

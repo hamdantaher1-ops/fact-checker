@@ -380,3 +380,58 @@ export async function checkGlobalDailyCap() {
     return { capped: false }; // fail open
   }
 }
+
+// --- Alternative product images ------------------------------------------
+// The research model may only report an image URL it actually saw in its
+// search results, and search results rarely carry one — so most
+// alternatives come back imageless and the cards render without a
+// picture. Fill the gap deterministically: fetch each alternative's own
+// page and take its og:image, the picture the store itself designates
+// for sharing that page. Best-effort and parallel; a store that blocks
+// the fetch or has no og:image simply stays imageless, and the card
+// already renders fine without one.
+
+async function fetchOgImage(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4000);
+  try {
+    const r = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Accept: "text/html",
+      },
+      signal: controller.signal,
+    });
+    if (!r.ok) return null;
+    const html = await r.text();
+    const tag =
+      html.match(/<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]*>/i)?.[0] ||
+      html.match(/<meta[^>]+content=["'][^"']+["'][^>]+property=["']og:image/i)?.[0];
+    const raw = tag?.match(/content=["']([^"']+)["']/i)?.[1];
+    if (!raw) return null;
+    const decoded = raw.replace(/&amp;/g, "&").trim();
+    const u = new URL(decoded, url);
+    return u.protocol === "http:" || u.protocol === "https:" ? u.toString() : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Mutates the result in place: fills image_url for alternatives that
+// lack one but have a page URL. Runs before the result is cached, so
+// the enriched card is what every later visitor is served too.
+export async function enrichAlternativeImages(result) {
+  if (!result || !Array.isArray(result.alternatives)) return result;
+  const targets = result.alternatives.filter(
+    (a) => a && typeof a === "object" && !a.image_url && typeof a.url === "string" && /^https?:\/\//i.test(a.url)
+  );
+  if (targets.length === 0) return result;
+  const images = await Promise.all(targets.map((a) => fetchOgImage(a.url)));
+  targets.forEach((a, i) => {
+    if (images[i]) a.image_url = images[i];
+  });
+  return result;
+}

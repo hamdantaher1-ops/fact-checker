@@ -29,6 +29,7 @@ import {
   writeCache,
   logUsage,
   tagResultAlternatives,
+  enrichAlternativeImages,
   callAnthropic,
   friendlyApiError,
   BUSY_MESSAGE,
@@ -75,7 +76,7 @@ const VERDICT_TOOL = {
             reason: { type: "string" },
             url: {
               type: "string",
-              description: "A real link from your research for this alternative — its official product page or a credible independent review/comparison of it. Never invent a URL; if you have no real link for an alternative, leave that alternative out.",
+              description: "A real link from your research for this alternative. Prefer the page where a shopper can actually buy it — its Amazon listing or the maker's/store's product page — when one appeared in your research; a credible independent review is the fallback. Never invent a URL; if you have no real link for an alternative, leave that alternative out.",
             },
             price_text: {
               type: ["string", "null"],
@@ -312,7 +313,7 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
 
 1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
-3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — its official product page or a credible independent review of it — never an invented URL. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL).
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — prefer the page where a shopper can buy it (its Amazon listing or the maker's/store's product page) when your research surfaced one, otherwise a credible independent review of it — never an invented URL. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL).
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Score with worth_it_score using these anchors, and make the score agree with your verdict label: 9-10 excellent, strong independent praise (Great Buy); 7-8 good and well reviewed with only minor caveats (Great Buy); 5-6 genuinely mixed evidence (Decent); 3-4 weak — poor value, recurring complaints, or clearly better alternatives (Skip It); 0-2 nothing verifiable to recommend (Skip It, or Avoid when there are active scam or deception signals).
@@ -337,6 +338,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
 
     const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === toolName);
     if (toolUse) {
+      await enrichAlternativeImages(toolUse.input);
       await writeCache(cacheKey, toolUse.input);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
       res.status(200).json(tagResultAlternatives(toolUse.input));
@@ -353,6 +355,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     }
     try {
       const parsedText = JSON.parse(stripFences(joined));
+      await enrichAlternativeImages(parsedText);
       await writeCache(cacheKey, parsedText);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
       res.status(200).json(tagResultAlternatives(parsedText));
@@ -362,6 +365,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       if (match) {
         try {
           const parsedMatch = JSON.parse(match[0]);
+          await enrichAlternativeImages(parsedMatch);
           await writeCache(cacheKey, parsedMatch);
           await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
           res.status(200).json(tagResultAlternatives(parsedMatch));
