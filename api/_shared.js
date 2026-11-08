@@ -1,0 +1,382 @@
+// Shared server helpers for the Fact Jury API functions (research + quick).
+// Vercel does not route files whose names start with "_" as endpoints, so
+// this module is import-only.
+//
+// Holds the Upstash plumbing both functions rely on — daily rate limiting,
+// the verdict result cache, usage logging — plus the Amazon Associates
+// link tagger. Keeping one copy here means /api/research and /api/quick
+// can never drift apart on cache keys or quota keys.
+
+import { createHash } from "node:crypto";
+
+export const DAILY_LIMIT = 5;
+
+export function stripFences(text) {
+  return text
+    .trim()
+    .replace(/^```(json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+}
+
+// Best-effort identification of the visitor by IP address. There's no
+// login here, so this is a speed bump against abuse, not a hard identity
+// check — people on the same network share a count, and it resets if
+// someone switches networks. That's an accepted tradeoff for a free,
+// no-login app.
+export function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  return req.socket?.remoteAddress || "unknown";
+}
+
+export function getUpstashConfig() {
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+  return url && token ? { url, token } : null;
+}
+
+function dailyCountKey(ip) {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, UTC
+  return `research-count:${ip}:${today}`;
+}
+
+// Talks to Upstash Redis over its REST API (no extra npm package needed).
+// Returns { limited: true } and skips enforcement entirely if the two env
+// vars aren't set, so the app still works before you finish setting up
+// the rate limiter.
+export async function checkAndIncrementDailyCount(ip) {
+  const cfg = getUpstashConfig();
+  if (!cfg) {
+    return { enforced: false, allowed: true, count: 0 };
+  }
+  const { url, token } = cfg;
+
+  const key = dailyCountKey(ip);
+
+  const incrRes = await fetch(`${url}/incr/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const incrData = await incrRes.json();
+  const count = incrData?.result;
+
+  if (count === 1) {
+    // First request today for this IP — set the key to expire in ~26
+    // hours so it cleans itself up without needing exact midnight math.
+    await fetch(`${url}/expire/${encodeURIComponent(key)}/93600`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  return { enforced: true, allowed: typeof count === "number" && count <= DAILY_LIMIT, count };
+}
+
+// Reads today's count WITHOUT incrementing. /api/quick uses this so the
+// quick + full pair costs exactly one quota unit: the quick call only
+// peeks (and refuses when the visitor is already at the limit), while the
+// paired /api/research call performs the single real increment.
+export async function peekDailyCount(ip) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return 0;
+  try {
+    const r = await fetch(`${cfg.url}/get/${encodeURIComponent(dailyCountKey(ip))}`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const data = await r.json();
+    const n = typeof data?.result === "string" ? parseInt(data.result, 10) : data?.result;
+    return typeof n === "number" && Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0; // fail open, same as the limiter itself
+  }
+}
+
+// --- Result cache -------------------------------------------------------
+// A finished verdict is stored in the same Upstash database and served
+// back for repeat checks of the same product or claim (7 days). Repeat
+// lookups are common — popular products, and every visitor who taps the
+// same "worth comparing to" alternative — and a cached answer returns in
+// milliseconds instead of re-running the whole research pipeline. Cache
+// hits do not consume the visitor's daily quota. Everything fails open:
+// if the cache is unreachable, the request just runs the research as
+// before.
+
+const CACHE_TTL_SECONDS = 604800; // 7 days
+
+function normalizeLink(link) {
+  try {
+    const u = new URL(link.trim());
+    const host = u.hostname.replace(/^(www\.|m\.)/, "").toLowerCase();
+    const path = u.pathname.replace(/\/+$/, "");
+    return `${host}${path}`;
+  } catch {
+    return link.trim().toLowerCase();
+  }
+}
+
+// The cache key decides what counts as "the same check". A check that came
+// from a post link is keyed on the link itself: the link never changes,
+// while the caption text fetched from the post can come back worded
+// slightly differently between visits (wrapper lines, line breaks), which
+// used to make every repeat of the same ad miss the cache. Typed checks
+// key on the normalized text.
+export function cacheKeyFor(isFactCheck, caption, query, link) {
+  let basis;
+  if (typeof link === "string" && link.trim()) {
+    basis = `link:${normalizeLink(link)}`;
+  } else if (typeof caption === "string" && caption.trim()) {
+    const text = caption
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLowerCase()
+      // Belt-and-braces: drop an Instagram engagement wrapper if one ever
+      // reaches the key ("12,345 Likes, 678 Comments - user on Instagram: \"…\"")
+      .replace(/^[\d,.]+\s+likes?,\s*[\d,.]+\s+comments?\s+-\s+.*?on instagram:\s*"/, "")
+      .replace(/"$/, "");
+    basis = `caption:${text}`;
+  } else {
+    basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+  }
+  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
+  return `verdict-cache:v3:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+}
+
+export async function readCache(key) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return null;
+  try {
+    const r = await fetch(`${cfg.url}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const data = await r.json();
+    if (typeof data?.result === "string" && data.result) {
+      return JSON.parse(data.result);
+    }
+  } catch {
+    // best-effort — a cache failure just means the research runs
+  }
+  return null;
+}
+
+export async function writeCache(key, value) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return;
+  try {
+    await fetch(cfg.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(["SET", key, JSON.stringify(value), "EX", String(CACHE_TTL_SECONDS)]),
+    });
+  } catch {
+    // best-effort — a failed write only costs the next visitor a re-run
+  }
+}
+
+export async function logUsage(ip, isFactCheck, subjectText, cached, resultLabel) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return;
+  try {
+    const event = JSON.stringify({
+      t: new Date().toISOString(),
+      ip: createHash("sha256").update(ip || "unknown").digest("hex").slice(0, 10),
+      mode: isFactCheck ? "factcheck" : "product",
+      subject: (subjectText || "").replace(/\s+/g, " ").slice(0, 120),
+      cached: !!cached,
+      result: resultLabel || null,
+    });
+    const post = (cmd) =>
+      fetch(cfg.url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(cmd),
+      });
+    await post(["LPUSH", "usage-events", event]);
+    await post(["LTRIM", "usage-events", "0", "199"]);
+  } catch {
+    // best-effort — usage logging must never block a verdict
+  }
+}
+
+// --- Amazon Associates tagging ------------------------------------------
+// When AMAZON_ASSOCIATE_TAG is set in the Vercel env, any amazon.* URL in
+// a result's alternatives gets tag=<value> appended at serve time (never
+// double-tagged, and never written into the cached copy — tagging happens
+// on the way out, so setting or changing the tag takes effect immediately,
+// including on results cached before the tag existed). When the env var is
+// unset, links pass through unchanged and earn nothing.
+
+export function amazonAssociateTag() {
+  const tag = process.env.AMAZON_ASSOCIATE_TAG;
+  return typeof tag === "string" && tag.trim() ? tag.trim() : null;
+}
+
+export function tagAmazonUrl(url) {
+  const tag = amazonAssociateTag();
+  if (!tag || typeof url !== "string") return url;
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)amazon\.[a-z.]+$/i.test(u.hostname)) return url;
+    if (!u.searchParams.has("tag")) {
+      u.searchParams.set("tag", tag);
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+// Returns the full result with alternative URLs tagged, plus an
+// `amazon_associate: true` marker when the tag is configured, so the
+// frontend knows to show the Amazon Associates disclosure line.
+export function tagResultAlternatives(result) {
+  if (!result || typeof result !== "object") return result;
+  const tag = amazonAssociateTag();
+  if (!tag) return result;
+  const out = { ...result, amazon_associate: true };
+  if (Array.isArray(result.alternatives)) {
+    out.alternatives = result.alternatives.map((alt) =>
+      alt && typeof alt === "object" ? { ...alt, url: tagAmazonUrl(alt.url) } : alt
+    );
+  }
+  return out;
+}
+
+// --- Load & failure hardening -------------------------------------------
+// Three protections for launch traffic, all fail-open (if Upstash or the
+// network misbehaves, requests proceed as before — a protection must never
+// become the outage):
+//
+// 1. callAnthropic — every Anthropic call goes through one wrapper with a
+//    per-attempt timeout and bounded retries on 429 (rate limit), 529
+//    (overloaded) and 5xx/network errors, honouring retry-after. Callers
+//    turn a final failure into a friendly message (friendlyApiError)
+//    instead of leaking the raw provider error to the visitor.
+// 2. Research lock — when many visitors check the SAME product at once
+//    (a viral post), only the first runs the research; the rest wait for
+//    the shared result to land in the cache instead of each paying for a
+//    duplicate run and piling onto the API at the same moment.
+// 3. Global daily cap — a circuit breaker on total fresh researches per
+//    UTC day (env GLOBAL_DAILY_FRESH_CAP, default 1000) so a traffic
+//    spike can't quietly drain the API balance. Cached verdicts and
+//    followers sharing an in-flight run never touch it.
+
+export const BUSY_MESSAGE =
+  "Fact Jury is unusually busy right now — give it a minute and try again.";
+export const CAPACITY_MESSAGE =
+  "Fact Jury has reached today's research capacity for new checks. Verdicts already researched still load instantly — please try a new check tomorrow.";
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export async function callAnthropic(apiKey, body, { timeoutMs = 60000, maxAttempts = 3 } = {}) {
+  let last = { ok: false, status: 0, data: null };
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const data = await r.json().catch(() => null);
+      last = { ok: r.ok, status: r.status, data };
+      if (r.ok) return last;
+      const retryable = r.status === 429 || r.status === 529 || r.status >= 500;
+      if (!retryable || attempt === maxAttempts) return last;
+      const retryAfter = Number(r.headers.get("retry-after"));
+      const backoff =
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 10000)
+          : Math.min(1000 * 2 ** (attempt - 1) + Math.random() * 500, 10000);
+      await sleep(backoff);
+    } catch (err) {
+      last = { ok: false, status: 0, data: null, error: err };
+      if (attempt === maxAttempts) return last;
+      await sleep(Math.min(1000 * 2 ** (attempt - 1), 8000));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return last;
+}
+
+export function friendlyApiError(status) {
+  return status === 429 || status === 529 || status === 0
+    ? BUSY_MESSAGE
+    : "The research hit a snag — please try again in a moment.";
+}
+
+function lockKeyFor(cacheKey) {
+  return `${cacheKey}:lock`;
+}
+
+// SET NX with a 150s TTL: long enough for a full research run plus
+// retries, short enough that a crashed run never wedges a product.
+export async function acquireResearchLock(cacheKey) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return true;
+  try {
+    const r = await fetch(cfg.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(["SET", lockKeyFor(cacheKey), "1", "NX", "EX", "150"]),
+    });
+    const data = await r.json();
+    return data?.result === "OK";
+  } catch {
+    return true; // fail open
+  }
+}
+
+export async function releaseResearchLock(cacheKey) {
+  const cfg = getUpstashConfig();
+  if (!cfg) return;
+  try {
+    await fetch(`${cfg.url}/del/${encodeURIComponent(lockKeyFor(cacheKey))}`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+  } catch {
+    // best-effort — the TTL cleans up regardless
+  }
+}
+
+// Polls the result cache for a verdict another in-flight request is
+// producing. ~36s of patience, inside the function's own time budget.
+export async function waitForCachedResult(cacheKey, { tries = 12, intervalMs = 3000 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    await sleep(intervalMs);
+    const hit = await readCache(cacheKey);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+export async function checkGlobalDailyCap() {
+  const cfg = getUpstashConfig();
+  if (!cfg) return { capped: false };
+  const parsed = Number(process.env.GLOBAL_DAILY_FRESH_CAP);
+  const cap = Number.isFinite(parsed) && parsed > 0 ? parsed : 1000;
+  const today = new Date().toISOString().slice(0, 10);
+  const key = `fresh-checks:global:${today}`;
+  try {
+    const r = await fetch(`${cfg.url}/incr/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const data = await r.json();
+    const count = data?.result;
+    if (count === 1) {
+      await fetch(`${cfg.url}/expire/${encodeURIComponent(key)}/93600`, {
+        headers: { Authorization: `Bearer ${cfg.token}` },
+      });
+    }
+    return { capped: typeof count === "number" && count > cap, count };
+  } catch {
+    return { capped: false }; // fail open
+  }
+}

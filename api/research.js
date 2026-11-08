@@ -19,173 +19,25 @@
 // set, rate limiting is skipped entirely (the app still works, just
 // unprotected against abuse).
 
-import { createHash } from "node:crypto";
-
-const DAILY_LIMIT = 5;
-
-function stripFences(text) {
-  return text
-    .trim()
-    .replace(/^```(json)?/i, "")
-    .replace(/```$/, "")
-    .trim();
-}
-
-// Best-effort identification of the visitor by IP address. There's no
-// login here, so this is a speed bump against abuse, not a hard identity
-// check — people on the same network share a count, and it resets if
-// someone switches networks. That's an accepted tradeoff for a free,
-// no-login app.
-function getClientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) {
-    return forwarded.split(",")[0].trim();
-  }
-  return req.socket?.remoteAddress || "unknown";
-}
-
-// Talks to Upstash Redis over its REST API (no extra npm package needed).
-// Returns { limited: true } and skips enforcement entirely if the two env
-// vars aren't set, so the app still works before you finish setting up
-// the rate limiter.
-async function checkAndIncrementDailyCount(ip) {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) {
-    return { enforced: false, allowed: true, count: 0 };
-  }
-
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, UTC
-  const key = `research-count:${ip}:${today}`;
-
-  const incrRes = await fetch(`${url}/incr/${encodeURIComponent(key)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  const incrData = await incrRes.json();
-  const count = incrData?.result;
-
-  if (count === 1) {
-    // First request today for this IP — set the key to expire in ~26
-    // hours so it cleans itself up without needing exact midnight math.
-    await fetch(`${url}/expire/${encodeURIComponent(key)}/93600`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-  }
-
-  return { enforced: true, allowed: typeof count === "number" && count <= DAILY_LIMIT, count };
-}
-
-// --- Result cache -------------------------------------------------------
-// A finished verdict is stored in the same Upstash database and served
-// back for repeat checks of the same product or claim (7 days). Repeat
-// lookups are common — popular products, and every visitor who taps the
-// same "worth comparing to" alternative — and a cached answer returns in
-// milliseconds instead of re-running the whole research pipeline. Cache
-// hits do not consume the visitor's daily quota. Everything fails open:
-// if the cache is unreachable, the request just runs the research as
-// before.
-
-const CACHE_TTL_SECONDS = 604800; // 7 days
-
-function getUpstashConfig() {
-  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-  return url && token ? { url, token } : null;
-}
-
-function normalizeLink(link) {
-  try {
-    const u = new URL(link.trim());
-    const host = u.hostname.replace(/^(www\.|m\.)/, "").toLowerCase();
-    const path = u.pathname.replace(/\/+$/, "");
-    return `${host}${path}`;
-  } catch {
-    return link.trim().toLowerCase();
-  }
-}
-
-// The cache key decides what counts as "the same check". A check that came
-// from a post link is keyed on the link itself: the link never changes,
-// while the caption text fetched from the post can come back worded
-// slightly differently between visits (wrapper lines, line breaks), which
-// used to make every repeat of the same ad miss the cache. Typed checks
-// key on the normalized text.
-function cacheKeyFor(isFactCheck, caption, query, link) {
-  let basis;
-  if (typeof link === "string" && link.trim()) {
-    basis = `link:${normalizeLink(link)}`;
-  } else if (typeof caption === "string" && caption.trim()) {
-    const text = caption
-      .trim()
-      .replace(/\s+/g, " ")
-      .toLowerCase()
-      // Belt-and-braces: drop an Instagram engagement wrapper if one ever
-      // reaches the key ("12,345 Likes, 678 Comments - user on Instagram: \"…\"")
-      .replace(/^[\d,.]+\s+likes?,\s*[\d,.]+\s+comments?\s+-\s+.*?on instagram:\s*"/, "")
-      .replace(/"$/, "");
-    basis = `caption:${text}`;
-  } else {
-    basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
-  }
-  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v2:${isFactCheck ? "factcheck" : "product"}:${digest}`;
-}
-
-async function readCache(key) {
-  const cfg = getUpstashConfig();
-  if (!cfg) return null;
-  try {
-    const r = await fetch(`${cfg.url}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${cfg.token}` },
-    });
-    const data = await r.json();
-    if (typeof data?.result === "string" && data.result) {
-      return JSON.parse(data.result);
-    }
-  } catch {
-    // best-effort — a cache failure just means the research runs
-  }
-  return null;
-}
-
-async function writeCache(key, value) {
-  const cfg = getUpstashConfig();
-  if (!cfg) return;
-  try {
-    await fetch(cfg.url, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify(["SET", key, JSON.stringify(value), "EX", String(CACHE_TTL_SECONDS)]),
-    });
-  } catch {
-    // best-effort — a failed write only costs the next visitor a re-run
-  }
-}
-
-async function logUsage(ip, isFactCheck, subjectText, cached, resultLabel) {
-  const cfg = getUpstashConfig();
-  if (!cfg) return;
-  try {
-    const event = JSON.stringify({
-      t: new Date().toISOString(),
-      ip: createHash("sha256").update(ip || "unknown").digest("hex").slice(0, 10),
-      mode: isFactCheck ? "factcheck" : "product",
-      subject: (subjectText || "").replace(/\s+/g, " ").slice(0, 120),
-      cached: !!cached,
-      result: resultLabel || null,
-    });
-    const post = (cmd) =>
-      fetch(cfg.url, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(cmd),
-      });
-    await post(["LPUSH", "usage-events", event]);
-    await post(["LTRIM", "usage-events", "0", "199"]);
-  } catch {
-    // best-effort — usage logging must never block a verdict
-  }
-}
+import {
+  DAILY_LIMIT,
+  stripFences,
+  getClientIp,
+  checkAndIncrementDailyCount,
+  cacheKeyFor,
+  readCache,
+  writeCache,
+  logUsage,
+  tagResultAlternatives,
+  callAnthropic,
+  friendlyApiError,
+  BUSY_MESSAGE,
+  CAPACITY_MESSAGE,
+  acquireResearchLock,
+  releaseResearchLock,
+  waitForCachedResult,
+  checkGlobalDailyCap,
+} from "./_shared.js";
 
 const VERDICT_TOOL = {
   name: "submit_verdict",
@@ -197,11 +49,21 @@ const VERDICT_TOOL = {
       verdict_label: { type: "string", enum: ["Great Buy", "Decent", "Skip It", "Avoid"] },
       worth_it_score: {
         type: "number",
-        description: "0 to 10. 10 = excellent purchase, highly recommended. 0 = terrible, avoid entirely.",
+        description: "0 to 10, anchored: 9-10 excellent, 7-8 good, 5-6 genuinely mixed, 3-4 weak, 0-2 nothing verifiable to recommend. Must agree with verdict_label: Great Buy 7-10, Decent 5-6, Skip It 0-4, Avoid 0-2. If research finds virtually no independent reviews, ratings, or third-party coverage, the score cannot exceed 2.",
       },
       summary: {
         type: "string",
         description: "2-4 sentences explaining the reasoning in plain language, covering both quality/value and any trust concerns.",
+      },
+      pros: {
+        type: "array",
+        description: "2-4 short bullet points FOR buying — concrete strengths backed by your research (review praise, ratings, value, guarantees). Each under ~12 words. Only real, sourced points; if there is genuinely nothing in its favour, return an empty array rather than inventing filler.",
+        items: { type: "string" },
+      },
+      cons: {
+        type: "array",
+        description: "2-4 short bullet points AGAINST buying — concrete weaknesses from your research (recurring complaints, poor value, missing independent reviews/coverage, trust or scam red flags). Each under ~12 words. Only real, sourced points; if there is genuinely nothing against it, return an empty array rather than inventing filler.",
+        items: { type: "string" },
       },
       alternatives: {
         type: "array",
@@ -214,6 +76,18 @@ const VERDICT_TOOL = {
             url: {
               type: "string",
               description: "A real link from your research for this alternative — its official product page or a credible independent review/comparison of it. Never invent a URL; if you have no real link for an alternative, leave that alternative out.",
+            },
+            price_text: {
+              type: ["string", "null"],
+              description: "The approximate price for this alternative exactly as seen in a source you actually read, formatted like '~$129' or '~£899'. If no price appeared in sources you actually read, set this to null. Never guess, round from memory, or invent a price.",
+            },
+            image_url: {
+              type: ["string", "null"],
+              description: "A product image URL you actually saw in your search results for this specific product. If you did not actually see an image URL for it, set this to null. Never construct or invent an image URL.",
+            },
+            blurb: {
+              type: "string",
+              description: "One short line (about 12 words max) on who this alternative suits best or its headline strength, e.g. 'The budget pick — nearly as good for half the price.'",
             },
           },
           required: ["name", "reason", "url"],
@@ -233,7 +107,7 @@ const VERDICT_TOOL = {
         },
       },
     },
-    required: ["product_name", "verdict_label", "worth_it_score", "summary", "alternatives", "sources"],
+    required: ["product_name", "verdict_label", "worth_it_score", "summary", "pros", "cons", "alternatives", "sources"],
   },
 };
 
@@ -326,7 +200,39 @@ export default async function handler(req, res) {
   const cached = await readCache(cacheKey);
   if (cached) {
     await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, cached.verdict_label || cached.rating);
-    res.status(200).json(cached);
+    res.status(200).json(tagResultAlternatives(cached));
+    return;
+  }
+
+  // Viral-spike dedupe: if another visitor is already researching this
+  // exact check, wait for their result to land in the cache and share it
+  // — no duplicate research run, and the shared result is free (followers
+  // never touch the daily quota or the global cap).
+  let holdingLock = await acquireResearchLock(cacheKey);
+  if (!holdingLock) {
+    const shared = await waitForCachedResult(cacheKey);
+    if (shared) {
+      await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, shared.verdict_label || shared.rating);
+      res.status(200).json(tagResultAlternatives(shared));
+      return;
+    }
+    // The first researcher finished without a result (or stalled) — try
+    // to take over as the researcher; if someone else already has, ask
+    // the visitor to retry shortly rather than piling on.
+    holdingLock = await acquireResearchLock(cacheKey);
+    if (!holdingLock) {
+      res.status(503).json({ error: BUSY_MESSAGE });
+      return;
+    }
+  }
+
+  // Circuit breaker: total fresh researches per day across all visitors,
+  // so a launch spike can't drain the API balance. Checked before the
+  // personal quota so a capacity refusal never costs the visitor a slot.
+  const capCheck = await checkGlobalDailyCap();
+  if (capCheck.capped) {
+    await releaseResearchLock(cacheKey);
+    res.status(503).json({ error: CAPACITY_MESSAGE });
     return;
   }
 
@@ -339,6 +245,7 @@ export default async function handler(req, res) {
     rateLimit = { enforced: false, allowed: true, count: 0 };
   }
   if (!rateLimit.allowed) {
+    await releaseResearchLock(cacheKey);
     res.status(429).json({
       error: `You've used all ${DAILY_LIMIT} free researches for today. Try again tomorrow.`,
       dailyLimit: DAILY_LIMIT,
@@ -405,30 +312,26 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
 
 1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
-3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — its official product page or a credible independent review of it — never an invented URL.
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — its official product page or a credible independent review of it — never an invented URL. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL).
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
+
+Score with worth_it_score using these anchors, and make the score agree with your verdict label: 9-10 excellent, strong independent praise (Great Buy); 7-8 good and well reviewed with only minor caveats (Great Buy); 5-6 genuinely mixed evidence (Decent); 3-4 weak — poor value, recurring complaints, or clearly better alternatives (Skip It); 0-2 nothing verifiable to recommend (Skip It, or Avoid when there are active scam or deception signals).
+Hard rule on missing evidence: if your research finds virtually no independent reviews, user ratings, or third-party coverage of the brand, the score cannot exceed 2. An invisible product is not a neutral product, and "no complaints found" about a brand nobody reviews is not a positive. Social media likes, follower counts, and the brand's own posts are marketing, not evidence, and never raise a score.
+
+Also distill your findings into pros and cons: 2-4 short bullets each, drawn only from what your research actually found. Pros are the concrete case for buying; cons are the concrete case against (including a missing review footprint when that's what you found). No generic filler on either side.
 
 Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
   }
 
   try {
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        messages: [{ role: "user", content: prompt }],
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }, tool],
-      }),
+    const { ok, status, data } = await callAnthropic(apiKey, {
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: prompt }],
+      tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 5 }, tool],
     });
-    const data = await anthropicRes.json();
-    if (!anthropicRes.ok) {
-      res.status(anthropicRes.status).json({ error: data?.error?.message || "Anthropic API request failed." });
+    if (!ok) {
+      res.status(status === 429 || status === 529 ? 503 : 502).json({ error: friendlyApiError(status) });
       return;
     }
 
@@ -436,7 +339,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     if (toolUse) {
       await writeCache(cacheKey, toolUse.input);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
-      res.status(200).json(toolUse.input);
+      res.status(200).json(tagResultAlternatives(toolUse.input));
       return;
     }
 
@@ -452,7 +355,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       const parsedText = JSON.parse(stripFences(joined));
       await writeCache(cacheKey, parsedText);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
-      res.status(200).json(parsedText);
+      res.status(200).json(tagResultAlternatives(parsedText));
       return;
     } catch {
       const match = joined.match(/\{[\s\S]*\}/);
@@ -461,7 +364,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
           const parsedMatch = JSON.parse(match[0]);
           await writeCache(cacheKey, parsedMatch);
           await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
-          res.status(200).json(parsedMatch);
+          res.status(200).json(tagResultAlternatives(parsedMatch));
           return;
         } catch {
           // fall through to the error below
@@ -470,6 +373,8 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       res.status(502).json({ error: "Couldn't parse the findings into a report. Try again." });
     }
   } catch (err) {
-    res.status(502).json({ error: err?.message || "Research request failed." });
+    res.status(502).json({ error: "The research hit a snag — please try again in a moment." });
+  } finally {
+    await releaseResearchLock(cacheKey);
   }
 }

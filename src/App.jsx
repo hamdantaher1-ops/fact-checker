@@ -90,16 +90,20 @@ export default function FactChecker() {
   const [manualCaption, setManualCaption] = useState("");
   const [clipboardNote, setClipboardNote] = useState("");
   const [research, setResearch] = useState(null);
+  const [quick, setQuick] = useState(null); // preliminary verdict from /api/quick, shown while the full research runs
   const [prevPage, setPrevPage] = useState(null); // findings we came from via a "worth comparing to" tap
 
   const verdictMeta = research?.verdict_label ? VERDICTS[research.verdict_label] : null;
   const factMeta = research?.rating ? FACT_RATINGS[research.rating] : null;
+  const quickVerdictMeta = quick?.verdict_label ? VERDICTS[quick.verdict_label] : null;
+  const quickFactMeta = quick?.rating ? FACT_RATINGS[quick.rating] : null;
 
   function switchMode(next) {
     if (next === mode) return;
     setMode(next);
     setStage("idle");
     setResearch(null);
+    setQuick(null);
     setPrevPage(null);
     setErrorMessage("");
     setManualCaption("");
@@ -124,7 +128,31 @@ export default function FactChecker() {
   }
 
   async function runResearch(payload, modeOverride) {
+    const runMode = modeOverride ?? mode;
     setStage("researching");
+    setQuick(null);
+
+    // Fast preliminary verdict, fired in parallel with the full research
+    // below: when it lands, a preliminary card appears while the jury is
+    // still deliberating, and the full findings replace it. Best-effort —
+    // any failure is silent and the flow behaves exactly as before.
+    (async () => {
+      try {
+        const quickRes = await fetch("/api/quick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: runMode, ...payload }),
+        });
+        if (!quickRes.ok) return;
+        const quickData = await quickRes.json();
+        if (quickData && (quickData.verdict_label || quickData.rating)) {
+          setQuick(quickData);
+        }
+      } catch {
+        // silent — the full research is the source of truth
+      }
+    })();
+
     try {
       const response = await fetch("/api/research", {
         method: "POST",
@@ -148,9 +176,13 @@ export default function FactChecker() {
       if (typeof data === "string") {
         parsed = JSON.parse(stripFences(data));
       }
+      // The full result is the source of truth — it replaces the
+      // preliminary card even where the two disagree.
       setResearch(parsed);
+      setQuick(null);
       setStage("done");
     } catch (err) {
+      setQuick(null);
       setStage("error");
       setErrorMessage(err.message || "Something went wrong while researching.");
     }
@@ -182,6 +214,7 @@ export default function FactChecker() {
   async function handleRun(linkText) {
     setErrorMessage("");
     setResearch(null);
+    setQuick(null);
     setPrevPage(null);
     setManualCaption("");
     setClipboardNote("");
@@ -214,6 +247,7 @@ export default function FactChecker() {
   async function handleSearchBrand(name) {
     setErrorMessage("");
     setResearch(null);
+    setQuick(null);
     setPrevPage(null);
     setManualCaption("");
     await runResearch({ query: name });
@@ -233,6 +267,7 @@ export default function FactChecker() {
     setErrorMessage("");
     setManualCaption("");
     setResearch(null);
+    setQuick(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
     runResearch({ query: alt.name }, "product");
   }
@@ -240,6 +275,7 @@ export default function FactChecker() {
   function goBackToPrev() {
     if (!prevPage) return;
     setResearch(prevPage.research);
+    setQuick(null);
     setMode(prevPage.mode);
     setStage("done");
     setErrorMessage("");
@@ -571,6 +607,59 @@ export default function FactChecker() {
           </section>
         )}
 
+        {/* Preliminary verdict: the fast tier's stamp + score + one
+            sentence, shown while the full research is still running.
+            The deliberation banner above stays up; the full findings
+            replace this card when they land. */}
+        {stage === "researching" && (quickVerdictMeta || quickFactMeta) && (
+          <section>
+            <SectionLabel index="B" title="The Findings" />
+            <p className="mt-3 text-[11px] font-semibold tracking-widest" style={{ color: RUST }}>
+              PRELIMINARY VERDICT
+            </p>
+
+            {quickVerdictMeta && (
+              <div className="mt-3 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+                <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
+                  <InkStamp color={quickVerdictMeta.stamp} rotate={quickVerdictMeta.rotate} label={quickVerdictMeta.label} />
+                  <div className="w-full min-w-[132px]">
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                      Worth-it score — {quick.worth_it_score}/10
+                    </p>
+                    <WorthBar score={quick.worth_it_score} color={quickVerdictMeta.stamp} />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">First take</p>
+                    <p className="text-sm leading-relaxed">{quick.one_sentence_summary}</p>
+                  </div>
+                  <p className="text-xs opacity-60 flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" /> Full findings on the way…
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {quickFactMeta && (
+              <div className="mt-3 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+                <InkStamp color={quickFactMeta.stamp} rotate={quickFactMeta.rotate} label={quickFactMeta.label} />
+
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">First take</p>
+                    <p className="text-sm leading-relaxed">{quick.one_sentence_summary}</p>
+                  </div>
+                  <p className="text-xs opacity-60 flex items-center gap-1.5">
+                    <Loader2 size={12} className="animate-spin" /> Full findings on the way…
+                  </p>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Exhibit C: findings */}
         {stage === "done" && research && (verdictMeta || factMeta) && (
           <section>
@@ -636,6 +725,37 @@ export default function FactChecker() {
             </div>
             )}
 
+            {verdictMeta && (research?.pros?.length > 0 || research?.cons?.length > 0) && (
+              <div className="mt-8 grid sm:grid-cols-2 gap-6">
+                {research?.pros?.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Pros</p>
+                    <ul className="space-y-2">
+                      {research.pros.map((point, i) => (
+                        <li key={i} className="text-sm leading-relaxed flex gap-2">
+                          <span className="shrink-0 font-bold" style={{ color: GREEN }}>+</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {research?.cons?.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Cons</p>
+                    <ul className="space-y-2">
+                      {research.cons.map((point, i) => (
+                        <li key={i} className="text-sm leading-relaxed flex gap-2">
+                          <span className="shrink-0 font-bold" style={{ color: RUST }}>−</span>
+                          <span>{point}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {factMeta && (
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
                 <InkStamp color={factMeta.stamp} rotate={factMeta.rotate} label={factMeta.label} />
@@ -674,29 +794,56 @@ export default function FactChecker() {
                 <p className="text-xs opacity-60 mb-3">Tap one to see Fact Jury&rsquo;s rating of it.</p>
                 <ul className="space-y-3">
                   {research.alternatives.map((alt, i) => (
-                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                      <button
-                        type="button"
-                        onClick={() => openAlternative(alt)}
-                        className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
-                        style={{ color: INK }}
-                      >
-                        {alt.name} <ChevronRight size={13} className="opacity-50" />
-                      </button>
-                      {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
-                      {alt.url && (
-                        <a
-                          href={alt.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
-                        >
-                          Maker&rsquo;s page <ExternalLink size={10} />
-                        </a>
+                    <li key={i} className="p-3 border flex gap-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
+                      {alt.image_url && (
+                        <img
+                          src={alt.image_url}
+                          alt={alt.name}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                          className="w-16 h-16 object-contain shrink-0 border self-start"
+                          style={{ borderColor: PAPER_LINE, background: "#fff" }}
+                        />
                       )}
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openAlternative(alt)}
+                          className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
+                          style={{ color: INK }}
+                        >
+                          {alt.name} <ChevronRight size={13} className="opacity-50" />
+                        </button>
+                        {alt.price_text && (
+                          <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
+                        )}
+                        {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
+                        {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
+                        {alt.url && (
+                          <a
+                            href={alt.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
+                          >
+                            See it at the maker / store <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>
+                <p className="text-[11px] opacity-50 mt-3">
+                  Links may earn Fact Jury a commission at no cost to you.
+                </p>
+                {research?.amazon_associate && (
+                  <p className="text-[11px] opacity-50 mt-1">
+                    As an Amazon Associate, Fact Jury earns from qualifying purchases.
+                  </p>
+                )}
               </div>
             )}
 
@@ -723,6 +870,10 @@ export default function FactChecker() {
                   ))}
                 </ul>
               </div>
+            )}
+
+            {verdictMeta && (
+              <JuryChat key={`${research.product_name}-${research.worth_it_score}`} verdict={research} />
             )}
           </section>
         )}
@@ -760,6 +911,100 @@ function SectionLabel({ index, title }) {
 // impression — mono word in a 3px rule whose edges are roughened by the
 // inkRoughen SVG displacement filter, no icon. The worth-it score never
 // sits inside the stamp; it prints underneath it.
+function JuryChat({ verdict }) {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [amazonAssociate, setAmazonAssociate] = useState(false);
+  const MAX_QUESTIONS = 10;
+  const asked = messages.filter((m) => m.from === "user").length;
+
+  async function send() {
+    const q = input.trim();
+    if (!q || sending || asked >= MAX_QUESTIONS) return;
+    const next = [...messages, { from: "user", text: q }];
+    setMessages(next);
+    setInput("");
+    setSending(true);
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          verdict,
+          messages: next.map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text })),
+        }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error || "The jury didn't answer — try again.");
+      if (data?.amazon_associate) setAmazonAssociate(true);
+      setMessages([...next, { from: "jury", text: data.reply }]);
+    } catch (err) {
+      setMessages([...next, { from: "jury", text: err?.message || "The jury didn't answer — try again." }]);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="mt-10 pt-8 border-t" style={{ borderColor: PAPER_LINE }}>
+      <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Ask the jury</p>
+      <p className="text-sm opacity-80 mb-4">
+        Questions about this verdict? Ask how it fits your needs — or whether a competitor beats it. Answers come
+        only from the research above; nothing new is looked up.
+      </p>
+
+      {messages.length > 0 && (
+        <div className="space-y-4 mb-4">
+          {messages.map((m, i) => (
+            <div key={i}>
+              <p className="text-[11px] uppercase tracking-wide opacity-50 mb-0.5">
+                {m.from === "user" ? "You" : "The jury"}
+              </p>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
+            </div>
+          ))}
+          {sending && <p className="text-sm opacity-60">The jury is conferring…</p>}
+        </div>
+      )}
+
+      {asked >= MAX_QUESTIONS ? (
+        <p className="text-sm opacity-60">
+          That's the end of this chat — run a new check any time from the search bar.
+        </p>
+      ) : (
+        <div className="flex gap-2">
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") send();
+            }}
+            aria-label="Ask the jury a question about this verdict"
+            className="flex-1 min-w-0 border px-3 py-2 text-sm bg-transparent outline-none"
+            style={{ borderColor: PAPER_LINE, color: INK }}
+          />
+          <button
+            onClick={send}
+            disabled={sending || !input.trim()}
+            className="px-4 py-2 text-sm font-medium disabled:opacity-40 shrink-0"
+            style={{ backgroundColor: INK, color: PAPER }}
+          >
+            Ask
+          </button>
+        </div>
+      )}
+
+      {amazonAssociate && (
+        <p className="text-[11px] opacity-50 mt-3">
+          Links may earn Fact Jury a commission at no cost to you. As an Amazon Associate, Fact Jury earns from
+          qualifying purchases.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function InkStamp({ color, rotate, label }) {
   return (
     <div
