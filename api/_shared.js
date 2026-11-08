@@ -235,6 +235,24 @@ export function tagAmazonUrl(url) {
   }
 }
 
+// True only for an Amazon URL that actually takes a shopper somewhere
+// useful: a product page (/dp/<ASIN>, /gp/product/<ASIN>, possibly behind
+// a name slug) or a search-results page carrying a real query. A bare
+// amazon.com link lands on the homepage, and any other Amazon path is
+// not a place to buy the product — neither is usable as a card link.
+export function isUsableAmazonUrl(url) {
+  if (typeof url !== "string") return false;
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)amazon\.[a-z.]+$/i.test(u.hostname)) return false;
+    if (/(^|\/)(dp|gp\/product|gp\/aw\/d)\/[A-Z0-9]{10}(\/|$)/i.test(u.pathname)) return true;
+    if (u.pathname === "/s" && (u.searchParams.get("k") || "").trim()) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // The standard Amazon search-results URL for a product name. Used as the
 // card's Amazon link when the research found no Amazon product page for
 // an alternative: it always lands the shopper on Amazon with that exact
@@ -263,8 +281,17 @@ export function tagResultAlternatives(result) {
       if (!alt || typeof alt !== "object") return alt;
       const next = { ...alt };
       if (typeof next.url === "string") next.url = tagAmazonUrl(next.url);
-      if (!next.amazon_url && isAmazonUrl(next.url)) next.amazon_url = next.url;
-      if (!next.amazon_url) next.amazon_url = amazonSearchUrl(next.name);
+      // The research sometimes returns an amazon_url that goes nowhere
+      // useful — a bare amazon.com link lands the shopper on the Amazon
+      // homepage. Only a real product page or a real search link may
+      // survive; anything else is replaced by the search link for the
+      // product's exact name, which always lands on that product.
+      if (!isUsableAmazonUrl(next.amazon_url) && isUsableAmazonUrl(next.url)) {
+        next.amazon_url = next.url;
+      }
+      if (!isUsableAmazonUrl(next.amazon_url)) {
+        next.amazon_url = amazonSearchUrl(next.name);
+      }
       if (next.amazon_url) next.amazon_url = tagAmazonUrl(next.amazon_url);
       return next;
     });
