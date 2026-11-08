@@ -71,6 +71,8 @@ function sanitizeVerdict(v) {
           url: tagAmazonUrl(str(a?.url, 300)),
           blurb: str(a?.blurb, 300),
           price_text: str(a?.price_text, 60) || null,
+          verdict_label: str(a?.verdict_label, 40) || null,
+          worth_it_score: typeof a?.worth_it_score === "number" ? a.worth_it_score : null,
         }))
       : [],
     sources: Array.isArray(v.sources)
@@ -90,7 +92,10 @@ function findingsText(v) {
   if (v.alternatives.length) {
     lines.push(
       `Researched alternatives:\n${v.alternatives
-        .map((a) => `- ${a.name}${a.price_text ? ` (approx. ${a.price_text})` : ""}: ${a.blurb} Link: ${a.url}`)
+        .map(
+          (a) =>
+            `- ${a.name}${a.price_text ? ` (approx. ${a.price_text})` : ""}: ${a.blurb} Link: ${a.url}${a.verdict_label ? ` Jury rating for this alternative: ${a.verdict_label}${a.worth_it_score != null ? ` (${a.worth_it_score}/10)` : ""}.` : ""}`
+        )
         .join("\n")}`
     );
   }

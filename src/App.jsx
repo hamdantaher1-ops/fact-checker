@@ -740,16 +740,9 @@ export default function FactChecker() {
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
-                  <p className="text-sm font-medium">{research.product_name}</p>
-                </div>
-
-                <div>
-                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
-                  <p className="text-sm leading-relaxed">{research.summary}</p>
-                </div>
+              <div>
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
+                <p className="text-sm font-medium">{research.product_name}</p>
               </div>
             </div>
             )}
@@ -782,6 +775,13 @@ export default function FactChecker() {
                     </ul>
                   </div>
                 )}
+              </div>
+            )}
+
+            {verdictMeta && research?.summary && (
+              <div className="mt-6">
+                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
+                <p className="text-sm leading-relaxed">{research.summary}</p>
               </div>
             )}
 
@@ -820,50 +820,88 @@ export default function FactChecker() {
             {research?.alternatives?.length > 0 && (
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth comparing to</p>
-                <p className="text-xs opacity-60 mb-3">Tap one to see Fact Jury&rsquo;s rating of it.</p>
+                <p className="text-xs opacity-60 mb-3">
+                  The jury&rsquo;s rating sits under each name — tap the name to buy it at the store.
+                </p>
                 <ul className="space-y-3">
-                  {research.alternatives.map((alt, i) => (
+                  {research.alternatives.map((alt, i) => {
+                    const altMeta = alt.verdict_label ? VERDICTS[alt.verdict_label] : null;
+                    return (
                     <li key={i} className="p-3 border flex gap-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                      {alt.image_url && (
-                        <img
-                          src={alt.image_url}
-                          alt={alt.name}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            e.currentTarget.style.display = "none";
-                          }}
-                          className="w-16 h-16 object-contain shrink-0 border self-start"
-                          style={{ borderColor: PAPER_LINE, background: "#fff" }}
-                        />
-                      )}
+                      {alt.image_url &&
+                        (alt.url ? (
+                          <a href={alt.url} target="_blank" rel="sponsored noopener noreferrer" className="shrink-0 self-start">
+                            <img
+                              src={alt.image_url}
+                              alt={alt.name}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none";
+                              }}
+                              className="w-16 h-16 object-contain border"
+                              style={{ borderColor: PAPER_LINE, background: "#fff" }}
+                            />
+                          </a>
+                        ) : (
+                          <img
+                            src={alt.image_url}
+                            alt={alt.name}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                            className="w-16 h-16 object-contain shrink-0 border self-start"
+                            style={{ borderColor: PAPER_LINE, background: "#fff" }}
+                          />
+                        ))}
                       <div className="min-w-0">
-                        <button
-                          type="button"
-                          onClick={() => openAlternative(alt)}
-                          className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
-                          style={{ color: INK }}
-                        >
-                          {alt.name} <ChevronRight size={13} className="opacity-50" />
-                        </button>
+                        {alt.url ? (
+                          <a
+                            href={alt.url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
+                            style={{ color: INK }}
+                          >
+                            {alt.name} <ExternalLink size={12} className="opacity-50 shrink-0" />
+                          </a>
+                        ) : (
+                          <p className="text-sm font-medium" style={{ color: INK }}>
+                            {alt.name}
+                          </p>
+                        )}
+                        {altMeta && (
+                          <p className="mt-1 flex items-center gap-2">
+                            <span
+                              className="border px-1.5 py-0.5 text-[10px] font-bold tracking-widest"
+                              style={{ color: altMeta.stamp, borderColor: altMeta.stamp }}
+                            >
+                              {altMeta.label}
+                            </span>
+                            {typeof alt.worth_it_score === "number" && (
+                              <span className="text-[11px] opacity-60">{alt.worth_it_score}/10</span>
+                            )}
+                          </p>
+                        )}
                         {alt.price_text && (
                           <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
                         )}
                         {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
                         {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
-                        {alt.url && (
-                          <a
-                            href={alt.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
-                          >
-                            {storeLabel(alt.url)} <ExternalLink size={10} />
-                          </a>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => openAlternative(alt)}
+                          className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
+                          style={{ color: INK }}
+                        >
+                          See the full check <ChevronRight size={10} />
+                        </button>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
                 <p className="text-[11px] opacity-50 mt-3">
                   Links may earn Fact Jury a commission at no cost to you.
@@ -940,15 +978,6 @@ function SectionLabel({ index, title }) {
 // impression — mono word in a 3px rule whose edges are roughened by the
 // inkRoughen SVG displacement filter, no icon. The worth-it score never
 // sits inside the stamp; it prints underneath it.
-function storeLabel(url) {
-  try {
-    if (/amazon\./i.test(new URL(url).hostname)) return "See it on Amazon";
-  } catch {
-    // not a parseable URL — fall through to the generic label
-  }
-  return "See it at the maker / store";
-}
-
 function JuryChat({ verdict }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");

@@ -139,7 +139,7 @@ export function cacheKeyFor(isFactCheck, caption, query, link) {
     basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
   }
   const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v3:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return `verdict-cache:v4:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 export async function readCache(key) {

@@ -55,7 +55,7 @@ const VERDICT_TOOL = {
       },
       summary: {
         type: "string",
-        description: "2-4 sentences explaining the reasoning in plain language, covering both quality/value and any trust concerns.",
+        description: "A SHORT verdict in plain language: at most 2 sentences and about 40 words. Verdict first, the single strongest reason, and any serious trust concern. Do NOT repeat the pros and cons — they have their own section below.",
       },
       pros: {
         type: "array",
@@ -90,6 +90,15 @@ const VERDICT_TOOL = {
             blurb: {
               type: "string",
               description: "One short line (about 12 words max) on who this alternative suits best or its headline strength, e.g. 'The budget pick — nearly as good for half the price.'",
+            },
+            verdict_label: {
+              type: ["string", "null"],
+              enum: ["Great Buy", "Decent", "Skip It", "Avoid", null],
+              description: "Your verdict for THIS alternative, rated with the same rubric as the main product from the research you did on it. Null only when your research found too little on it to rate honestly.",
+            },
+            worth_it_score: {
+              type: ["number", "null"],
+              description: "0-10 worth-it score for this alternative, agreeing with its verdict_label (Great Buy 7-10, Decent 5-6, Skip It 0-4, Avoid 0-2). Same hard rule as the main product: virtually no independent reviews, ratings, or coverage caps the score at 2. Null when verdict_label is null.",
             },
           },
           required: ["name", "reason", "url"],
@@ -317,13 +326,15 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
 
 1. Identify the specific product, brand, or service in question.
 2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
-3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — prefer the page where a shopper can buy it (its Amazon listing or the maker's/store's product page) when your research surfaced one, otherwise a credible independent review of it — never an invented URL. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL).
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research — prefer the page where a shopper can buy it (its Amazon listing or the maker's/store's product page) when your research surfaced one, otherwise a credible independent review of it — never an invented URL. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL). Also RATE each alternative the same way you rate the main product — a verdict label and a 0-10 worth-it score from the research you did on it, using the same score anchors and the same missing-evidence cap; give a null rating only when you found too little on it to judge honestly.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Score with worth_it_score using these anchors, and make the score agree with your verdict label: 9-10 excellent, strong independent praise (Great Buy); 7-8 good and well reviewed with only minor caveats (Great Buy); 5-6 genuinely mixed evidence (Decent); 3-4 weak — poor value, recurring complaints, or clearly better alternatives (Skip It); 0-2 nothing verifiable to recommend (Skip It, or Avoid when there are active scam or deception signals).
 Hard rule on missing evidence: if your research finds virtually no independent reviews, user ratings, or third-party coverage of the brand, the score cannot exceed 2. An invisible product is not a neutral product, and "no complaints found" about a brand nobody reviews is not a positive. Social media likes, follower counts, and the brand's own posts are marketing, not evidence, and never raise a score.
 
 Also distill your findings into pros and cons: 2-4 short bullets each, drawn only from what your research actually found. Pros are the concrete case for buying; cons are the concrete case against (including a missing review footprint when that's what you found). No generic filler on either side.
+
+Keep the summary SHORT: at most 2 sentences. The pros and cons carry the detail — the summary is just the headline reasoning, and it must not repeat them.
 
 Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
   }
