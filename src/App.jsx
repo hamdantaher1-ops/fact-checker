@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Stamp } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { Search, FileWarning, ShieldCheck, ShieldAlert, ShieldX, Ban, Link2, Loader2, ChevronRight, ExternalLink, Stamp, MessageCircle, X } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Design tokens (see plan): case-file / dossier aesthetic.
@@ -996,8 +996,16 @@ function JuryChat({ verdict }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [amazonAssociate, setAmazonAssociate] = useState(false);
+  const [open, setOpen] = useState(false);
+  const listRef = useRef(null);
   const MAX_QUESTIONS = 10;
   const asked = messages.filter((m) => m.from === "user").length;
+
+  // The conversation scrolls inside its own panel — the page never grows.
+  useEffect(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, sending, open]);
 
   async function send() {
     const q = input.trim();
@@ -1027,64 +1035,120 @@ function JuryChat({ verdict }) {
   }
 
   return (
-    <div className="mt-10 pt-8 border-t" style={{ borderColor: PAPER_LINE }}>
-      <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Ask the jury</p>
-      <p className="text-sm opacity-80 mb-4">
-        Questions about this verdict? Ask how it fits your needs — or whether a competitor beats it. Answers come
-        only from the research above; nothing new is looked up.
-      </p>
+    <>
+      {/* In the verdict, the chat is just a short invitation + button, so
+          the page stays the same length no matter how long the
+          conversation gets. The chat itself lives in the panel below. */}
+      <div className="mt-10 pt-8 border-t" style={{ borderColor: PAPER_LINE }}>
+        <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Ask the jury</p>
+        <p className="text-sm opacity-80 mb-4">
+          Questions about this verdict? Ask how it fits your needs — or whether a competitor beats it. Answers
+          come only from the research above; nothing new is looked up.
+        </p>
+        <button
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium"
+          style={{ backgroundColor: INK, color: PAPER }}
+        >
+          <MessageCircle size={15} /> Chat with the jury
+        </button>
+      </div>
 
-      {messages.length > 0 && (
-        <div className="space-y-4 mb-4">
-          {messages.map((m, i) => (
-            <div key={i}>
-              <p className="text-[11px] uppercase tracking-wide opacity-50 mb-0.5">
-                {m.from === "user" ? "You" : "The jury"}
-              </p>
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
-            </div>
-          ))}
-          {sending && <p className="text-sm opacity-60">The jury is conferring…</p>}
-        </div>
+      {/* Floating bubble: stays in reach while the visitor scrolls the
+          verdict, and reopens the conversation where they left it. */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          aria-label="Open the Ask the Jury chat"
+          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg"
+          style={{ backgroundColor: INK, color: PAPER }}
+        >
+          <MessageCircle size={16} /> Ask the Jury
+        </button>
       )}
 
-      {asked >= MAX_QUESTIONS ? (
-        <p className="text-sm opacity-60">
-          That's the end of this chat — run a new check any time from the search bar.
-        </p>
-      ) : (
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") send();
-            }}
-            aria-label="Ask the jury a question about this verdict"
-            className="flex-1 min-w-0 border px-3 py-2 text-sm bg-transparent outline-none"
-            style={{ borderColor: PAPER_LINE, color: INK }}
-          />
-          <button
-            onClick={send}
-            disabled={sending || !input.trim()}
-            className="px-4 py-2 text-sm font-medium disabled:opacity-40 shrink-0"
-            style={{ backgroundColor: INK, color: PAPER }}
+      {/* Chat panel: fixed size, its own scroll — the page behind it
+          doesn't move or grow. */}
+      {open && (
+        <div
+          className="fixed inset-x-3 bottom-3 z-50 flex flex-col border shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
+          style={{ backgroundColor: PAPER, borderColor: PAPER_LINE, maxHeight: "min(72vh, 580px)" }}
+        >
+          <div
+            className="flex items-start justify-between gap-3 px-4 py-3 border-b shrink-0"
+            style={{ borderColor: PAPER_LINE }}
           >
-            Ask
-          </button>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide opacity-60">Ask the jury</p>
+              <p className="text-sm font-medium truncate">{verdict.product_name}</p>
+            </div>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="Close the chat"
+              className="p-1 opacity-60 hover:opacity-100 shrink-0"
+              style={{ color: INK }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div ref={listRef} className="overflow-y-auto px-4 py-3 space-y-4 flex-1">
+            {messages.length === 0 && (
+              <p className="text-sm opacity-70 leading-relaxed">
+                Ask anything about this verdict — whether it fits your needs, how it compares, or whether one of
+                the alternatives above beats it.
+              </p>
+            )}
+            {messages.map((m, i) => (
+              <div key={i}>
+                <p className="text-[11px] uppercase tracking-wide opacity-50 mb-0.5">
+                  {m.from === "user" ? "You" : "The jury"}
+                </p>
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
+              </div>
+            ))}
+            {sending && <p className="text-sm opacity-60">The jury is conferring…</p>}
+          </div>
+
+          <div className="px-4 pb-3 pt-2 border-t shrink-0" style={{ borderColor: PAPER_LINE }}>
+            {asked >= MAX_QUESTIONS ? (
+              <p className="text-sm opacity-60 py-1">
+                That's the end of this chat — run a new check any time from the search bar.
+              </p>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") send();
+                  }}
+                  aria-label="Ask the jury a question about this verdict"
+                  className="flex-1 min-w-0 border px-3 py-2 text-sm bg-transparent outline-none"
+                  style={{ borderColor: PAPER_LINE, color: INK }}
+                />
+                <button
+                  onClick={send}
+                  disabled={sending || !input.trim()}
+                  className="px-4 py-2 text-sm font-medium disabled:opacity-40 shrink-0"
+                  style={{ backgroundColor: INK, color: PAPER }}
+                >
+                  Ask
+                </button>
+              </div>
+            )}
+            {amazonAssociate && (
+              <p className="text-[11px] opacity-50 mt-2">
+                Links may earn Fact Jury a commission at no cost to you. As an Amazon Associate, Fact Jury earns
+                from qualifying purchases.
+              </p>
+            )}
+          </div>
         </div>
       )}
-
-      {amazonAssociate && (
-        <p className="text-[11px] opacity-50 mt-3">
-          Links may earn Fact Jury a commission at no cost to you. As an Amazon Associate, Fact Jury earns from
-          qualifying purchases.
-        </p>
-      )}
-    </div>
+    </>
   );
 }
-
 function InkStamp({ color, rotate, label }) {
   return (
     <div
