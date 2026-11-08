@@ -72,6 +72,22 @@ function stripFences(text) {
 // link input at a time, driven off this.
 // idle -> fetching -> (need-caption -> researching) | researching -> done
 //                   \-> error (from any step)
+// Owner bypass: a one-time visit to factjury.com/?owner=<token> stores
+// the token on this device; every API call from this device then carries
+// it, and the server exempts the owner from the daily limits. Nothing is
+// shown in the UI, and other visitors never see or send it.
+function ownerToken() {
+  try {
+    return window.localStorage.getItem("fj_owner") || null;
+  } catch {
+    return null;
+  }
+}
+function ownerHeaders() {
+  const t = ownerToken();
+  return t ? { "x-owner-token": t } : {};
+}
+
 export default function FactChecker() {
   // Deep-link prefill: the iOS app's share sheet lands people on
   // factjury.com/?link=<shared post URL>. Pre-fill the search box with it
@@ -140,7 +156,7 @@ export default function FactChecker() {
       try {
         const quickRes = await fetch("/api/quick", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...ownerHeaders() },
           body: JSON.stringify({ mode: runMode, ...payload }),
         });
         if (!quickRes.ok) return;
@@ -156,7 +172,7 @@ export default function FactChecker() {
     try {
       const response = await fetch("/api/research", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...ownerHeaders() },
         body: JSON.stringify({ mode: modeOverride ?? mode, ...payload }),
       });
       const raw = await response.text();
@@ -293,7 +309,20 @@ export default function FactChecker() {
   // Opened with ?link= (e.g. handed over by the Fact Jury app's share
   // extension): pre-fill the box and start the check automatically.
   useEffect(() => {
-    const shared = new URLSearchParams(window.location.search).get("link");
+    const params = new URLSearchParams(window.location.search);
+    const owner = params.get("owner");
+    if (owner) {
+      try {
+        window.localStorage.setItem("fj_owner", owner);
+      } catch {
+        // storage unavailable (private mode) — the visit still works,
+        // the bypass just won't persist on this device
+      }
+      params.delete("owner");
+      const qs = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+    const shared = params.get("link");
     if (shared && looksLikeLink(shared)) {
       setSearchText(shared);
       handleRun(/^https?:\/\//i.test(shared) ? shared : `https://${shared}`);
@@ -938,7 +967,7 @@ function JuryChat({ verdict }) {
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...ownerHeaders() },
         body: JSON.stringify({
           verdict,
           messages: next.map((m) => ({ role: m.from === "user" ? "user" : "assistant", content: m.text })),

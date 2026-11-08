@@ -21,6 +21,7 @@ import {
   friendlyApiError,
   tagAmazonUrl,
   amazonAssociateTag,
+  isOwnerRequest,
 } from "./_shared.js";
 
 const CHAT_DAILY_LIMIT = 30;
@@ -147,7 +148,7 @@ export default async function handler(req, res) {
   }
 
   const ip = getClientIp(req);
-  const cap = await checkAndIncrementChatCount(ip);
+  const cap = isOwnerRequest(req) ? { allowed: true } : await checkAndIncrementChatCount(ip);
   if (!cap.allowed) {
     res.status(429).json({ error: "You've reached today's chat limit — the verdict above still has the full findings." });
     return;

@@ -435,3 +435,21 @@ export async function enrichAlternativeImages(result) {
   });
   return result;
 }
+
+// --- Owner bypass ---------------------------------------------------------
+// The site owner testing their own product should never hit the visitor
+// limits. When OWNER_BYPASS_TOKEN is set in the Vercel env, a request
+// carrying that exact value in the x-owner-token header skips the daily
+// research quota, the global cap, and the chat cap. The website stores
+// the token on the owner's own device after a one-time
+// factjury.com/?owner=<token> visit (see App.jsx) and attaches it
+// silently from then on. Unset env var = feature off. The daily limit
+// is a speed bump against abuse, not a security boundary — this matches
+// that threat model.
+
+export function isOwnerRequest(req) {
+  const expected = process.env.OWNER_BYPASS_TOKEN;
+  if (typeof expected !== "string" || !expected) return false;
+  const got = req.headers?.["x-owner-token"];
+  return typeof got === "string" && got.length > 0 && got === expected;
+}

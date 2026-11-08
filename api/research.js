@@ -38,6 +38,7 @@ import {
   releaseResearchLock,
   waitForCachedResult,
   checkGlobalDailyCap,
+  isOwnerRequest,
 } from "./_shared.js";
 
 const VERDICT_TOOL = {
@@ -231,14 +232,17 @@ export default async function handler(req, res) {
   // so a launch spike can't drain the API balance. Checked before the
   // personal quota so a capacity refusal never costs the visitor a slot.
   const capCheck = await checkGlobalDailyCap();
-  if (capCheck.capped) {
+  if (capCheck.capped && !isOwnerRequest(req)) {
     await releaseResearchLock(cacheKey);
     res.status(503).json({ error: CAPACITY_MESSAGE });
     return;
   }
 
   let rateLimit;
-  try {
+  if (isOwnerRequest(req)) {
+    // The owner testing their own site never consumes or hits the quota.
+    rateLimit = { enforced: false, allowed: true, count: 0 };
+  } else try {
     rateLimit = await checkAndIncrementDailyCount(ip);
   } catch (err) {
     // If the rate limiter itself fails (e.g. Upstash is briefly down),

@@ -24,6 +24,7 @@ import {
   readCache,
   callAnthropic,
   friendlyApiError,
+  isOwnerRequest,
 } from "./_shared.js";
 
 const QUICK_VERDICT_TOOL = {
@@ -142,7 +143,7 @@ export default async function handler(req, res) {
   // limit, the paired /api/research call is about to 429 anyway; answer
   // the same way here so no preliminary card flashes up first.
   const usedToday = await peekDailyCount(ip);
-  if (usedToday >= DAILY_LIMIT) {
+  if (!isOwnerRequest(req) && usedToday >= DAILY_LIMIT) {
     res.status(429).json({
       error: `You've used all ${DAILY_LIMIT} free researches for today. Try again tomorrow.`,
       dailyLimit: DAILY_LIMIT,
