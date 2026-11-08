@@ -715,6 +715,50 @@ export default function FactChecker() {
               <div>
                 <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
                 <p className="text-sm font-medium">{research.product_name}</p>
+                {(() => {
+                  const mainIsAmazon = (() => {
+                    try {
+                      return !!research.url && /amazon\./i.test(new URL(research.url).hostname);
+                    } catch {
+                      return false;
+                    }
+                  })();
+                  if (!research.amazon_url && !research.url) return null;
+                  return (
+                    <>
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                        {research.amazon_url && (
+                          <a
+                            href={research.amazon_url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
+                            style={{ color: INK }}
+                          >
+                            Amazon <ExternalLink size={10} className="opacity-50 shrink-0" />
+                          </a>
+                        )}
+                        {research.url && !mainIsAmazon && (
+                          <a
+                            href={research.url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
+                            style={{ color: INK }}
+                          >
+                            Maker&rsquo;s site <ExternalLink size={10} className="opacity-50 shrink-0" />
+                          </a>
+                        )}
+                      </div>
+                      {!research?.alternatives?.length && research.amazon_associate && (
+                        <p className="text-[11px] opacity-50 mt-2">
+                          Links may earn Fact Jury a commission at no cost to you. As an Amazon
+                          Associate, Fact Jury earns from qualifying purchases.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             )}

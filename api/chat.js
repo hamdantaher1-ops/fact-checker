@@ -59,6 +59,18 @@ function sanitizeVerdict(v) {
     Array.isArray(x) ? x.filter((i) => typeof i === "string").slice(0, n).map((i) => i.slice(0, m)) : [];
   return {
     product_name: str(v.product_name, 200),
+    // The main product's own buy links, prepared the same way as the
+    // alternatives': store link tagged, and an Amazon link that falls
+    // back to the store url when it IS Amazon, else the Amazon search
+    // link for the product name — always carrying the affiliate tag.
+    url: tagAmazonUrl(str(v.url, 300)) || null,
+    amazon_url: (() => {
+      const given = str(v.amazon_url, 300);
+      if (given) return tagAmazonUrl(given);
+      const u = tagAmazonUrl(str(v.url, 300));
+      if (isAmazonUrl(u)) return u;
+      return tagAmazonUrl(amazonSearchUrl(str(v.product_name, 200)) || "") || null;
+    })(),
     verdict_label: str(v.verdict_label, 40),
     worth_it_score: typeof v.worth_it_score === "number" ? v.worth_it_score : null,
     summary: str(v.summary, 1500),
@@ -99,6 +111,11 @@ function findingsText(v) {
     `Verdict: ${v.verdict_label}${v.worth_it_score != null ? ` — worth-it score ${v.worth_it_score}/10` : ""}`,
     `Reasoning: ${v.summary}`,
   ];
+  if (v.amazon_url || v.url) {
+    lines.push(
+      `Where to buy this product:${v.amazon_url ? ` Amazon: ${v.amazon_url}` : ""}${v.url && v.url !== v.amazon_url ? ` Maker's site: ${v.url}` : ""}`
+    );
+  }
   if (v.pros.length) lines.push(`Pros:\n${v.pros.map((p) => `- ${p}`).join("\n")}`);
   if (v.cons.length) lines.push(`Cons:\n${v.cons.map((c) => `- ${c}`).join("\n")}`);
   if (v.alternatives.length) {

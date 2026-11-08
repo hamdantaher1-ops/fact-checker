@@ -48,6 +48,14 @@ const VERDICT_TOOL = {
     type: "object",
     properties: {
       product_name: { type: "string", description: "The specific product, brand, or service identified." },
+      url: {
+        type: ["string", "null"],
+        description: "A real link from your research to the maker's or store's own page for THIS product (NOT Amazon — the Amazon link goes in amazon_url). Prefer the product page where a shopper can buy it. Never invent a URL; null when no real link appeared in your research.",
+      },
+      amazon_url: {
+        type: ["string", "null"],
+        description: "The Amazon product page for THIS product, from one dedicated Amazon search (the product name together with amazon.com). Null when no Amazon listing genuinely appeared — never guess one; the site adds its own Amazon search link in that case.",
+      },
       verdict_label: { type: "string", enum: ["Great Buy", "Decent", "Skip It", "Avoid"] },
       worth_it_score: {
         type: "number",
@@ -329,7 +337,7 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
     prompt = `You are a consumer product research analyst. ${subject}
 
 1. Identify the specific product, brand, or service in question.
-2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing.
+2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing. Also record this product's own buy links: the maker's or store's product page in url (not Amazon), and — from one dedicated search for this product on Amazon — its Amazon product page in amazon_url when one genuinely appears, otherwise null; never invent either link.
 3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research to the maker's or store's own page for it — the product page where a shopper can buy it when your research surfaced one, otherwise a credible independent review of it — never an invented URL. ALSO, for each alternative, run one dedicated search for that product on Amazon (for example, search for the product name together with amazon.com) and, when an Amazon listing for it genuinely appears, record that Amazon product page separately in amazon_url; when none appears, set amazon_url to null rather than guessing one — the site adds its own Amazon search link in that case. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL). Also RATE each alternative the same way you rate the main product — a verdict label and a 0-10 worth-it score from the research you did on it, using the same score anchors and the same missing-evidence cap; give a null rating only when you found too little on it to judge honestly.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 

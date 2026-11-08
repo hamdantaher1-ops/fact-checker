@@ -139,7 +139,7 @@ export function cacheKeyFor(isFactCheck, caption, query, link) {
     basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
   }
   const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v5:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return `verdict-cache:v6:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 export async function readCache(key) {
@@ -276,6 +276,26 @@ export function tagResultAlternatives(result) {
   const tag = amazonAssociateTag();
   const out = { ...result };
   if (tag) out.amazon_associate = true;
+  // The main product gets the same link treatment as its alternatives:
+  // its store link tagged, and an amazon_url that is always usable —
+  // the real Amazon product page when the research found one (or when
+  // its own store url IS the Amazon page), otherwise the tagged Amazon
+  // search link for the product's name. Product verdicts only: a
+  // fact-check result carries a rating, not a product to buy.
+  if (
+    typeof result.verdict_label === "string" &&
+    typeof result.product_name === "string" &&
+    result.product_name.trim()
+  ) {
+    if (typeof out.url === "string") out.url = tagAmazonUrl(out.url);
+    if (!isUsableAmazonUrl(out.amazon_url) && isUsableAmazonUrl(out.url)) {
+      out.amazon_url = out.url;
+    }
+    if (!isUsableAmazonUrl(out.amazon_url)) {
+      out.amazon_url = amazonSearchUrl(result.product_name);
+    }
+    if (out.amazon_url) out.amazon_url = tagAmazonUrl(out.amazon_url);
+  }
   if (Array.isArray(result.alternatives)) {
     out.alternatives = result.alternatives.map((alt) => {
       if (!alt || typeof alt !== "object") return alt;
