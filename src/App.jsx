@@ -636,9 +636,10 @@ export default function FactChecker() {
           </section>
         )}
 
-        {/* Preliminary verdict: the fast tier's stamp + score + one
-            sentence, shown while the full research is still running.
-            The deliberation banner above stays up; the full findings
+        {/* Preliminary verdict: the fast tier's stamp + one sentence,
+            shown while the full research is still running. No score
+            here — the score arrives only with the full verdict. The
+            deliberation banner above stays up; the full findings
             replace this card when they land. */}
         {stage === "researching" && (quickVerdictMeta || quickFactMeta) && (
           <section>
@@ -651,12 +652,6 @@ export default function FactChecker() {
               <div className="mt-3 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
                 <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
                   <InkStamp color={quickVerdictMeta.stamp} rotate={quickVerdictMeta.rotate} label={quickVerdictMeta.label} />
-                  <div className="w-full min-w-[132px]">
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
-                      Worth-it score — {quick.worth_it_score}/10
-                    </p>
-                    <WorthBar score={quick.worth_it_score} color={quickVerdictMeta.stamp} />
-                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -703,29 +698,6 @@ export default function FactChecker() {
               >
                 ← Back to {prevPage.label}
               </button>
-            )}
-
-            {juryMood && (
-              <figure className="mt-4 border-2" style={{ borderColor: INK, background: PAPER }}>
-                <img
-                  src={`/jury/reading-${juryMood}.gif`}
-                  alt="The jury reads its verdict"
-                  className="w-full block"
-                />
-                <figcaption
-                  className="px-3 py-2 border-t-2 text-[11px]"
-                  style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
-                >
-                  <span className="font-semibold tracking-widest">THE JURY HAS REACHED A VERDICT</span>{" "}
-                  <span className="opacity-70">
-                    {juryMood === "good"
-                      ? "They approve."
-                      : juryMood === "bad"
-                        ? "They do not approve."
-                        : "A split decision — the fine print is below."}
-                  </span>
-                </figcaption>
-              </figure>
             )}
 
             {verdictMeta && (
@@ -785,6 +757,29 @@ export default function FactChecker() {
               </div>
             )}
 
+            {juryMood && (
+              <figure className="mt-8 border-2" style={{ borderColor: INK, background: PAPER }}>
+                <img
+                  src={`/jury/reading-${juryMood}.gif`}
+                  alt="The jury reads its verdict"
+                  className="w-full block"
+                />
+                <figcaption
+                  className="px-3 py-2 border-t-2 text-[11px]"
+                  style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
+                >
+                  <span className="font-semibold tracking-widest">THE JURY HAS REACHED A VERDICT</span>{" "}
+                  <span className="opacity-70">
+                    {juryMood === "good"
+                      ? "They approve."
+                      : juryMood === "bad"
+                        ? "They do not approve."
+                        : "A split decision — the fine print is below."}
+                  </span>
+                </figcaption>
+              </figure>
+            )}
+
             {factMeta && (
               <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
                 <InkStamp color={factMeta.stamp} rotate={factMeta.rotate} label={factMeta.label} />
@@ -821,11 +816,18 @@ export default function FactChecker() {
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth comparing to</p>
                 <p className="text-xs opacity-60 mb-3">
-                  The jury&rsquo;s rating sits under each name — tap the name to buy it at the store.
+                  The jury&rsquo;s rating sits under each name. Tap an Amazon pick to buy it there — other picks open their full Fact Jury check.
                 </p>
                 <ul className="space-y-3">
                   {research.alternatives.map((alt, i) => {
                     const altMeta = alt.verdict_label ? VERDICTS[alt.verdict_label] : null;
+                    const altIsAmazon = (() => {
+                      try {
+                        return !!alt.url && /amazon\./i.test(new URL(alt.url).hostname);
+                      } catch {
+                        return false;
+                      }
+                    })();
                     return (
                     <li key={i} className="p-3 border flex gap-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
                       {alt.image_url &&
@@ -857,7 +859,7 @@ export default function FactChecker() {
                           />
                         ))}
                       <div className="min-w-0">
-                        {alt.url ? (
+                        {altIsAmazon ? (
                           <a
                             href={alt.url}
                             target="_blank"
@@ -867,6 +869,15 @@ export default function FactChecker() {
                           >
                             {alt.name} <ExternalLink size={12} className="opacity-50 shrink-0" />
                           </a>
+                        ) : alt.url ? (
+                          <button
+                            type="button"
+                            onClick={() => openAlternative(alt)}
+                            className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
+                            style={{ color: INK }}
+                          >
+                            {alt.name} <ChevronRight size={13} className="opacity-50 shrink-0" />
+                          </button>
                         ) : (
                           <p className="text-sm font-medium" style={{ color: INK }}>
                             {alt.name}
@@ -890,14 +901,16 @@ export default function FactChecker() {
                         )}
                         {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
                         {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
-                        <button
-                          type="button"
-                          onClick={() => openAlternative(alt)}
-                          className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
-                          style={{ color: INK }}
-                        >
-                          See the full check <ChevronRight size={10} />
-                        </button>
+                        {altIsAmazon && (
+                          <button
+                            type="button"
+                            onClick={() => openAlternative(alt)}
+                            className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
+                            style={{ color: INK }}
+                          >
+                            See the full check <ChevronRight size={10} />
+                          </button>
+                        )}
                       </div>
                     </li>
                     );
