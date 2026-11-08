@@ -816,7 +816,7 @@ export default function FactChecker() {
               <div className="mt-8">
                 <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth comparing to</p>
                 <p className="text-xs opacity-60 mb-3">
-                  The jury&rsquo;s rating sits under each name. Tap an Amazon pick to buy it there — other picks open their full Fact Jury check.
+                  The jury&rsquo;s rating sits under each name. At the bottom of every card are three links — buy it on Amazon, the maker&rsquo;s own site, or read its full Fact Jury verdict.
                 </p>
                 <ul className="space-y-3">
                   {research.alternatives.map((alt, i) => {
@@ -829,23 +829,9 @@ export default function FactChecker() {
                       }
                     })();
                     return (
-                    <li key={i} className="p-3 border flex gap-3" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
-                      {alt.image_url &&
-                        (alt.url ? (
-                          <a href={alt.url} target="_blank" rel="sponsored noopener noreferrer" className="shrink-0 self-start">
-                            <img
-                              src={alt.image_url}
-                              alt={alt.name}
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                              className="w-16 h-16 object-contain border"
-                              style={{ borderColor: PAPER_LINE, background: "#fff" }}
-                            />
-                          </a>
-                        ) : (
+                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
+                      <div className="flex gap-3">
+                        {alt.image_url && (
                           <img
                             src={alt.image_url}
                             alt={alt.name}
@@ -857,60 +843,65 @@ export default function FactChecker() {
                             className="w-16 h-16 object-contain shrink-0 border self-start"
                             style={{ borderColor: PAPER_LINE, background: "#fff" }}
                           />
-                        ))}
-                      <div className="min-w-0">
-                        {altIsAmazon ? (
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium" style={{ color: INK }}>
+                            {alt.name}
+                          </p>
+                          {altMeta && (
+                            <p className="mt-1 flex items-center gap-2">
+                              <span
+                                className="border px-1.5 py-0.5 text-[10px] font-bold tracking-widest"
+                                style={{ color: altMeta.stamp, borderColor: altMeta.stamp }}
+                              >
+                                {altMeta.label}
+                              </span>
+                              {typeof alt.worth_it_score === "number" && (
+                                <span className="text-[11px] opacity-60">{alt.worth_it_score}/10</span>
+                              )}
+                            </p>
+                          )}
+                          {alt.price_text && (
+                            <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
+                          )}
+                          {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
+                          {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
+                        </div>
+                      </div>
+                      <div
+                        className="mt-3 pt-2 border-t flex flex-wrap gap-x-4 gap-y-1"
+                        style={{ borderColor: PAPER_LINE }}
+                      >
+                        {alt.amazon_url && (
+                          <a
+                            href={alt.amazon_url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
+                            style={{ color: INK }}
+                          >
+                            Amazon <ExternalLink size={10} className="opacity-50 shrink-0" />
+                          </a>
+                        )}
+                        {alt.url && !altIsAmazon && (
                           <a
                             href={alt.url}
                             target="_blank"
                             rel="sponsored noopener noreferrer"
-                            className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
+                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
                             style={{ color: INK }}
                           >
-                            {alt.name} <ExternalLink size={12} className="opacity-50 shrink-0" />
+                            Maker&rsquo;s site <ExternalLink size={10} className="opacity-50 shrink-0" />
                           </a>
-                        ) : alt.url ? (
-                          <button
-                            type="button"
-                            onClick={() => openAlternative(alt)}
-                            className="text-sm font-medium hover:underline inline-flex items-center gap-1 text-left"
-                            style={{ color: INK }}
-                          >
-                            {alt.name} <ChevronRight size={13} className="opacity-50 shrink-0" />
-                          </button>
-                        ) : (
-                          <p className="text-sm font-medium" style={{ color: INK }}>
-                            {alt.name}
-                          </p>
                         )}
-                        {altMeta && (
-                          <p className="mt-1 flex items-center gap-2">
-                            <span
-                              className="border px-1.5 py-0.5 text-[10px] font-bold tracking-widest"
-                              style={{ color: altMeta.stamp, borderColor: altMeta.stamp }}
-                            >
-                              {altMeta.label}
-                            </span>
-                            {typeof alt.worth_it_score === "number" && (
-                              <span className="text-[11px] opacity-60">{alt.worth_it_score}/10</span>
-                            )}
-                          </p>
-                        )}
-                        {alt.price_text && (
-                          <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
-                        )}
-                        {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
-                        {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
-                        {altIsAmazon && (
-                          <button
-                            type="button"
-                            onClick={() => openAlternative(alt)}
-                            className="text-[11px] hover:underline inline-flex items-center gap-1 mt-1 opacity-60"
-                            style={{ color: INK }}
-                          >
-                            See the full check <ChevronRight size={10} />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => openAlternative(alt)}
+                          className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
+                          style={{ color: INK }}
+                        >
+                          Fact Jury verdict <ChevronRight size={10} className="opacity-50 shrink-0" />
+                        </button>
                       </div>
                     </li>
                     );

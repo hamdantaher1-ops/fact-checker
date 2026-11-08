@@ -20,6 +20,8 @@ import {
   callAnthropic,
   friendlyApiError,
   tagAmazonUrl,
+  amazonSearchUrl,
+  isAmazonUrl,
   amazonAssociateTag,
   isOwnerRequest,
 } from "./_shared.js";
@@ -69,6 +71,16 @@ function sanitizeVerdict(v) {
           // client is holding, a recommended Amazon alternative leaves
           // this endpoint carrying Fact Jury's affiliate tag.
           url: tagAmazonUrl(str(a?.url, 300)),
+          // The card's dedicated Amazon link. Falls back the same way
+          // the cards do: the store url when it IS Amazon, else the
+          // Amazon search link for the product name.
+          amazon_url: (() => {
+            const given = str(a?.amazon_url, 300);
+            if (given) return tagAmazonUrl(given);
+            const u = tagAmazonUrl(str(a?.url, 300));
+            if (isAmazonUrl(u)) return u;
+            return tagAmazonUrl(amazonSearchUrl(str(a?.name, 120)) || "") || null;
+          })(),
           blurb: str(a?.blurb, 300),
           price_text: str(a?.price_text, 60) || null,
           verdict_label: str(a?.verdict_label, 40) || null,
@@ -94,7 +106,7 @@ function findingsText(v) {
       `Researched alternatives:\n${v.alternatives
         .map(
           (a) =>
-            `- ${a.name}${a.price_text ? ` (approx. ${a.price_text})` : ""}: ${a.blurb} Link: ${a.url}${a.verdict_label ? ` Jury rating for this alternative: ${a.verdict_label}${a.worth_it_score != null ? ` (${a.worth_it_score}/10)` : ""}.` : ""}`
+            `- ${a.name}${a.price_text ? ` (approx. ${a.price_text})` : ""}: ${a.blurb} Store link: ${a.url}${a.amazon_url ? ` Amazon link: ${a.amazon_url}` : ""}${a.verdict_label ? ` Jury rating for this alternative: ${a.verdict_label}${a.worth_it_score != null ? ` (${a.worth_it_score}/10)` : ""}.` : ""}`
         )
         .join("\n")}`
     );
@@ -109,7 +121,7 @@ const SYSTEM = `You are the Fact Jury assistant, answering a shopper's follow-up
 
 Rules:
 - Answer questions about this product, how it fits the shopper's situation, and how it compares to the researched alternatives.
-- When the shopper asks whether something better exists, recommend from the researched alternatives only, explain briefly why it beats (or doesn't beat) the checked product, and include its link exactly as given.
+- When the shopper asks whether something better exists, recommend from the researched alternatives only, explain briefly why it beats (or doesn't beat) the checked product, and when you give a buying link use its Amazon link exactly as given.
 - Never invent prices, specs, links, reviews, or facts that are not in the findings. If the findings don't cover a question, say so plainly and suggest they run a fresh check on that product from the search bar.
 - Keep answers short: a few sentences, or a short list when comparing. Plain, friendly, direct.
 - Judge products, never people. If asked something unrelated to this product or shopping for it, politely steer back to the verdict.`;
@@ -187,13 +199,9 @@ export default async function handler(req, res) {
   // recommended product must never leave without the affiliate tag.
   reply = reply.replace(/https?:\/\/[^\s<)"']+/gi, (u) => tagAmazonUrl(u));
 
-  const hasAmazonAlternative = cleanVerdict.alternatives.some((a) => {
-    try {
-      return /amazon\./i.test(new URL(a.url).hostname);
-    } catch {
-      return false;
-    }
-  });
+  const hasAmazonAlternative = cleanVerdict.alternatives.some(
+    (a) => isAmazonUrl(a.url) || isAmazonUrl(a.amazon_url)
+  );
   res.status(200).json({
     reply,
     amazon_associate: Boolean(amazonAssociateTag()) && hasAmazonAlternative,

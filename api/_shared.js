@@ -139,7 +139,7 @@ export function cacheKeyFor(isFactCheck, caption, query, link) {
     basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
   }
   const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v4:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return `verdict-cache:v5:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 export async function readCache(key) {
@@ -211,6 +211,15 @@ export function amazonAssociateTag() {
   return typeof tag === "string" && tag.trim() ? tag.trim() : null;
 }
 
+export function isAmazonUrl(url) {
+  if (typeof url !== "string") return false;
+  try {
+    return /(^|\.)amazon\.[a-z.]+$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function tagAmazonUrl(url) {
   const tag = amazonAssociateTag();
   if (!tag || typeof url !== "string") return url;
@@ -226,18 +235,39 @@ export function tagAmazonUrl(url) {
   }
 }
 
-// Returns the full result with alternative URLs tagged, plus an
-// `amazon_associate: true` marker when the tag is configured, so the
-// frontend knows to show the Amazon Associates disclosure line.
+// The standard Amazon search-results URL for a product name. Used as the
+// card's Amazon link when the research found no Amazon product page for
+// an alternative: it always lands the shopper on Amazon with that exact
+// product searched, and it carries the affiliate tag like any other
+// Amazon link. It is a search link, never a fabricated product page.
+export function amazonSearchUrl(name) {
+  if (typeof name !== "string" || !name.trim()) return null;
+  return `https://www.amazon.com/s?k=${encodeURIComponent(name.trim())}`;
+}
+
+// Returns the full result with alternative links prepared for the cards,
+// plus an `amazon_associate: true` marker when the tag is configured, so
+// the frontend knows to show the Amazon Associates disclosure line.
+// Every alternative leaves with a working amazon_url: the real Amazon
+// product page when the research found one (or when its main url IS the
+// Amazon page), otherwise the Amazon search link for its name — so the
+// card's Amazon link is never missing. Tagging happens here, at serve
+// time, never in the cached copy.
 export function tagResultAlternatives(result) {
   if (!result || typeof result !== "object") return result;
   const tag = amazonAssociateTag();
-  if (!tag) return result;
-  const out = { ...result, amazon_associate: true };
+  const out = { ...result };
+  if (tag) out.amazon_associate = true;
   if (Array.isArray(result.alternatives)) {
-    out.alternatives = result.alternatives.map((alt) =>
-      alt && typeof alt === "object" ? { ...alt, url: tagAmazonUrl(alt.url) } : alt
-    );
+    out.alternatives = result.alternatives.map((alt) => {
+      if (!alt || typeof alt !== "object") return alt;
+      const next = { ...alt };
+      if (typeof next.url === "string") next.url = tagAmazonUrl(next.url);
+      if (!next.amazon_url && isAmazonUrl(next.url)) next.amazon_url = next.url;
+      if (!next.amazon_url) next.amazon_url = amazonSearchUrl(next.name);
+      if (next.amazon_url) next.amazon_url = tagAmazonUrl(next.amazon_url);
+      return next;
+    });
   }
   return out;
 }
