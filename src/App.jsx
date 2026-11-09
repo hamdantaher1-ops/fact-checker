@@ -350,6 +350,8 @@ export default function FactChecker() {
     <div style={{ background: PAPER, color: INK, minHeight: "100%", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }} className="w-full">
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap');
+        .fj-label { color: #6B6459; }
+        .fj-sub { color: #6B6459; }
       `}</style>
       <InkFilterDefs />
 
@@ -686,7 +688,7 @@ export default function FactChecker() {
 
         {/* Exhibit C: findings */}
         {stage === "done" && research && (verdictMeta || factMeta) && (
-          <section>
+          <section className="fj-findings">
             <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
 
             {prevPage && (
@@ -700,12 +702,35 @@ export default function FactChecker() {
               </button>
             )}
 
+            {juryMood && (
+              <figure className="mt-4 border-2" style={{ borderColor: INK, background: PAPER }}>
+                <img
+                  src={`/jury/reading-${juryMood}.gif`}
+                  alt="The jury reads its verdict"
+                  className="w-full block"
+                />
+                <figcaption
+                  className="px-3 py-2 border-t-2 text-[11px]"
+                  style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
+                >
+                  <span className="font-semibold tracking-widest">THE JURY HAS REACHED A VERDICT</span>{" "}
+                  <span className="fj-sub">
+                    {juryMood === "good"
+                      ? "They approve."
+                      : juryMood === "bad"
+                        ? "They do not approve."
+                        : "A split decision — the fine print is below."}
+                  </span>
+                </figcaption>
+              </figure>
+            )}
+
             {verdictMeta && (
-            <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+            <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
               <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
                 <InkStamp color={verdictMeta.stamp} rotate={verdictMeta.rotate} label={verdictMeta.label} />
                 <div className="w-full min-w-[132px]">
-                  <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                  <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">
                     Worth-it score — {research.worth_it_score}/10
                   </p>
                   <WorthBar score={research.worth_it_score} color={verdictMeta.stamp} />
@@ -713,8 +738,8 @@ export default function FactChecker() {
               </div>
 
               <div>
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Product identified</p>
-                <p className="text-sm font-medium">{research.product_name}</p>
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Product identified</p>
+                <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-xl font-semibold leading-snug">{research.product_name}</p>
                 {(() => {
                   const mainIsAmazon = (() => {
                     try {
@@ -751,7 +776,7 @@ export default function FactChecker() {
                         )}
                       </div>
                       {!research?.alternatives?.length && research.amazon_associate && (
-                        <p className="text-[11px] opacity-50 mt-2">
+                        <p className="fj-sub text-[11px] mt-2">
                           Links may earn Fact Jury a commission at no cost to you. As an Amazon
                           Associate, Fact Jury earns from qualifying purchases.
                         </p>
@@ -767,10 +792,10 @@ export default function FactChecker() {
               <div className="mt-8 grid sm:grid-cols-2 gap-6">
                 {research?.pros?.length > 0 && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Pros</p>
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Pros</p>
                     <ul className="space-y-2">
                       {research.pros.map((point, i) => (
-                        <li key={i} className="text-sm leading-relaxed flex gap-2">
+                        <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
                           <span className="shrink-0 font-bold" style={{ color: GREEN }}>+</span>
                           <span>{point}</span>
                         </li>
@@ -780,10 +805,10 @@ export default function FactChecker() {
                 )}
                 {research?.cons?.length > 0 && (
                   <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Cons</p>
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Cons</p>
                     <ul className="space-y-2">
                       {research.cons.map((point, i) => (
-                        <li key={i} className="text-sm leading-relaxed flex gap-2">
+                        <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
                           <span className="shrink-0 font-bold" style={{ color: RUST }}>−</span>
                           <span>{point}</span>
                         </li>
@@ -796,32 +821,9 @@ export default function FactChecker() {
 
             {verdictMeta && research?.summary && (
               <div className="mt-6">
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
-                <p className="text-sm leading-relaxed">{research.summary}</p>
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Reasoning</p>
+                <p className="text-[15px] leading-[1.65]">{research.summary}</p>
               </div>
-            )}
-
-            {juryMood && (
-              <figure className="mt-8 border-2" style={{ borderColor: INK, background: PAPER }}>
-                <img
-                  src={`/jury/reading-${juryMood}.gif`}
-                  alt="The jury reads its verdict"
-                  className="w-full block"
-                />
-                <figcaption
-                  className="px-3 py-2 border-t-2 text-[11px]"
-                  style={{ borderColor: INK, background: "rgba(238,235,226,0.6)" }}
-                >
-                  <span className="font-semibold tracking-widest">THE JURY HAS REACHED A VERDICT</span>{" "}
-                  <span className="opacity-70">
-                    {juryMood === "good"
-                      ? "They approve."
-                      : juryMood === "bad"
-                        ? "They do not approve."
-                        : "A split decision — the fine print is below."}
-                  </span>
-                </figcaption>
-              </figure>
             )}
 
             {factMeta && (
@@ -830,13 +832,13 @@ export default function FactChecker() {
 
                 <div className="space-y-4">
                   <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">The claim</p>
-                    <p className="text-sm font-medium leading-relaxed">&ldquo;{research.claim}&rdquo;</p>
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">The claim</p>
+                    <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-lg font-semibold leading-snug">&ldquo;{research.claim}&rdquo;</p>
                   </div>
 
                   <div>
-                    <p className="text-xs uppercase tracking-wide opacity-60 mb-1">What the evidence shows</p>
-                    <p className="text-sm leading-relaxed">{research.summary}</p>
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">What the evidence shows</p>
+                    <p className="text-[15px] leading-[1.65]">{research.summary}</p>
                   </div>
                 </div>
               </div>
@@ -844,10 +846,10 @@ export default function FactChecker() {
 
             {factMeta && research?.evidence?.length > 0 && (
               <div className="mt-8">
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Key evidence</p>
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Key evidence</p>
                 <ul className="space-y-2">
                   {research.evidence.map((point, i) => (
-                    <li key={i} className="text-sm leading-relaxed flex gap-2">
+                    <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
                       <ChevronRight size={14} className="shrink-0 mt-1 opacity-50" />
                       <span>{point}</span>
                     </li>
@@ -858,8 +860,8 @@ export default function FactChecker() {
 
             {research?.alternatives?.length > 0 && (
               <div className="mt-8">
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Worth comparing to</p>
-                <p className="text-xs opacity-60 mb-3">
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Worth comparing to</p>
+                <p className="fj-sub text-xs mb-3">
                   The jury&rsquo;s rating sits under each name. At the bottom of every card are three links — buy it on Amazon, the maker&rsquo;s own site, or read its full Fact Jury verdict.
                 </p>
                 <ul className="space-y-3">
@@ -873,7 +875,7 @@ export default function FactChecker() {
                       }
                     })();
                     return (
-                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: "#fff" }}>
+                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: PAPER }}>
                       <div className="flex gap-3">
                         {alt.image_url && (
                           <img
@@ -889,7 +891,7 @@ export default function FactChecker() {
                           />
                         )}
                         <div className="min-w-0">
-                          <p className="text-sm font-medium" style={{ color: INK }}>
+                          <p className="text-[15px] font-semibold" style={{ color: INK, fontFamily: "'Source Serif 4', Georgia, serif" }}>
                             {alt.name}
                           </p>
                           {altMeta && (
@@ -909,7 +911,7 @@ export default function FactChecker() {
                             <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
                           )}
                           {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
-                          {alt.reason && <p className="text-xs opacity-70 mt-0.5">{alt.reason}</p>}
+                          {alt.reason && <p className="fj-sub text-xs mt-0.5">{alt.reason}</p>}
                         </div>
                       </div>
                       <div
@@ -951,11 +953,11 @@ export default function FactChecker() {
                     );
                   })}
                 </ul>
-                <p className="text-[11px] opacity-50 mt-3">
+                <p className="fj-sub text-[11px] mt-3">
                   Links may earn Fact Jury a commission at no cost to you.
                 </p>
                 {research?.amazon_associate && (
-                  <p className="text-[11px] opacity-50 mt-1">
+                  <p className="fj-sub text-[11px] mt-1">
                     As an Amazon Associate, Fact Jury earns from qualifying purchases.
                   </p>
                 )}
@@ -964,7 +966,7 @@ export default function FactChecker() {
 
             {research?.sources?.length > 0 && (
               <div className="mt-8">
-                <p className="text-xs uppercase tracking-wide opacity-60 mb-2">Sources consulted</p>
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Sources consulted</p>
                 <ul className="divide-y" style={{ borderColor: PAPER_LINE }}>
                   {research.sources.map((s, i) => (
                     <li key={i} className="py-3 flex items-start justify-between gap-4">
@@ -978,7 +980,7 @@ export default function FactChecker() {
                         >
                           {s.title}
                         </a>
-                        {s.note && <p className="text-xs opacity-60 mt-0.5">{s.note}</p>}
+                        {s.note && <p className="fj-sub text-xs mt-0.5">{s.note}</p>}
                       </div>
                       <ExternalLink size={14} className="opacity-40 mt-1 shrink-0" />
                     </li>
