@@ -28,7 +28,7 @@ const STAMP_GREY = "#5C564C";
 const VERDICTS = {
   "Great Buy": { color: GREEN, stamp: STAMP_GREEN, label: "APPROVED", Icon: ShieldCheck, rotate: "-6deg" },
   "Decent": { color: AMBER, stamp: STAMP_OCHRE, label: "MIXED", Icon: ShieldAlert, rotate: "3deg" },
-  "Skip It": { color: SLATE, stamp: STAMP_GREY, label: "PASS", Icon: Ban, rotate: "-4deg" },
+  "Skip It": { color: SLATE, stamp: STAMP_GREY, label: "SKIP", Icon: Ban, rotate: "-4deg" },
   "Avoid": { color: RUST, stamp: STAMP_TERRA, label: "AVOID", Icon: ShieldX, rotate: "5deg" },
 };
 
