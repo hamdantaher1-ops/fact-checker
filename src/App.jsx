@@ -483,7 +483,7 @@ export default function FactChecker() {
                   onChange={(e) => setSearchText(e.target.value)}
                   maxLength={500}
                   disabled={busy}
-                  className="w-full min-w-0 bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
+                  className="w-full min-w-0 bg-transparent outline-none px-2 py-2.5 text-base disabled:opacity-60"
                 />
               </div>
               <button
@@ -657,7 +657,7 @@ export default function FactChecker() {
                     ? "Paste the post's caption here — or type the claim as you heard it…"
                     : "Paste the post's caption here…"
                 }
-                className="w-full text-sm p-3 border outline-none"
+                className="w-full text-base p-3 border outline-none"
                 style={{ borderColor: INK, background: "#fff" }}
               />
               <button
@@ -1173,8 +1173,15 @@ function JuryChat({ verdict }) {
         >
           <div className="w-full max-w-3xl mx-auto flex flex-col flex-1 min-h-0">
           <div
-            className="flex items-start justify-between gap-3 px-4 sm:px-6 py-3 border-b shrink-0"
-            style={{ borderColor: PAPER_LINE }}
+            className="flex items-start justify-between gap-3 px-4 sm:px-6 border-b shrink-0"
+            style={{
+              borderColor: PAPER_LINE,
+              // Taher, Nov 10: the header sat up under the iPhone notch /
+              // Dynamic Island and couldn't be read. Drop it well clear of
+              // the safe area so the title and Close are fully visible.
+              paddingTop: "calc(env(safe-area-inset-top, 0px) + 30px)",
+              paddingBottom: 12,
+            }}
           >
             <div className="min-w-0">
               <p className="text-xs uppercase tracking-wide opacity-60">Ask the jury</p>
@@ -1208,7 +1215,10 @@ function JuryChat({ verdict }) {
             {sending && <p className="text-sm opacity-60">The jury is conferring…</p>}
           </div>
 
-          <div className="px-4 sm:px-6 pb-4 pt-2 border-t shrink-0" style={{ borderColor: PAPER_LINE }}>
+          <div
+            className="px-4 sm:px-6 pt-2 border-t shrink-0"
+            style={{ borderColor: PAPER_LINE, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 16px)" }}
+          >
             {asked >= MAX_QUESTIONS ? (
               <p className="text-sm opacity-60 py-1">
                 That's the end of this chat — run a new check any time from the search bar.
@@ -1222,7 +1232,7 @@ function JuryChat({ verdict }) {
                     if (e.key === "Enter") send();
                   }}
                   aria-label="Ask the jury a question about this verdict"
-                  className="flex-1 min-w-0 border px-3 py-2 text-sm bg-transparent outline-none"
+                  className="flex-1 min-w-0 border px-3 py-2 text-base bg-transparent outline-none"
                   style={{ borderColor: PAPER_LINE, color: INK }}
                 />
                 <button
