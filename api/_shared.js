@@ -139,7 +139,7 @@ export function cacheKeyFor(isFactCheck, caption, query, link) {
     basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
   }
   const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v6:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return `verdict-cache:v7:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 export async function readCache(key) {
@@ -253,6 +253,34 @@ export function isUsableAmazonUrl(url) {
   }
 }
 
+// Extract the ASIN from an Amazon URL, whatever path shape it arrived
+// in. Research results sometimes carry a product's ASIN behind a
+// non-product path — most often /clp/<ASIN>, a landing-page form that
+// does not reliably open the product page — when the canonical buy link
+// is /dp/<ASIN>. Returns null when the URL is not Amazon or carries no
+// ASIN.
+export function extractAmazonAsin(url) {
+  if (typeof url !== "string") return null;
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)amazon\.[a-z.]+$/i.test(u.hostname)) return null;
+    const m = u.pathname.match(
+      /(?:^|\/)(?:dp|gp\/product|gp\/aw\/d|clp)\/([A-Z0-9]{10})(?:\/|$)/i
+    );
+    return m ? m[1].toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+// The canonical Amazon product-page URL for any Amazon URL that carries
+// an ASIN (see above); any other URL passes through unchanged. The
+// affiliate tag is NOT added here — tagAmazonUrl does that downstream.
+export function canonicalAmazonUrl(url) {
+  const asin = extractAmazonAsin(url);
+  return asin ? `https://www.amazon.com/dp/${asin}` : url;
+}
+
 // The standard Amazon search-results URL for a product name. Used as the
 // card's Amazon link when the research found no Amazon product page for
 // an alternative: it always lands the shopper on Amazon with that exact
@@ -287,7 +315,10 @@ export function tagResultAlternatives(result) {
     typeof result.product_name === "string" &&
     result.product_name.trim()
   ) {
-    if (typeof out.url === "string") out.url = tagAmazonUrl(out.url);
+    // Canonicalize first: an Amazon link carrying an ASIN behind a
+    // non-product path (e.g. /clp/<ASIN>) becomes the real /dp/ page.
+    if (typeof out.url === "string") out.url = tagAmazonUrl(canonicalAmazonUrl(out.url));
+    if (typeof out.amazon_url === "string") out.amazon_url = canonicalAmazonUrl(out.amazon_url);
     if (!isUsableAmazonUrl(out.amazon_url) && isUsableAmazonUrl(out.url)) {
       out.amazon_url = out.url;
     }
@@ -300,7 +331,8 @@ export function tagResultAlternatives(result) {
     out.alternatives = result.alternatives.map((alt) => {
       if (!alt || typeof alt !== "object") return alt;
       const next = { ...alt };
-      if (typeof next.url === "string") next.url = tagAmazonUrl(next.url);
+      if (typeof next.url === "string") next.url = tagAmazonUrl(canonicalAmazonUrl(next.url));
+      if (typeof next.amazon_url === "string") next.amazon_url = canonicalAmazonUrl(next.amazon_url);
       // The research sometimes returns an amazon_url that goes nowhere
       // useful — a bare amazon.com link lands the shopper on the Amazon
       // homepage. Only a real product page or a real search link may
@@ -317,6 +349,82 @@ export function tagResultAlternatives(result) {
     });
   }
   return out;
+}
+
+// --- Amazon availability probe --------------------------------------------
+// Best-effort check that an Amazon product page is still a page a shopper
+// can buy from. Returns "dead" ONLY on unambiguous signals seen in a full
+// product page: an HTTP 404/410, Amazon's "couldn't find that page" error
+// page, or a real product page whose availability reads "Currently
+// unavailable". Everything else — robot-check interstitials (Amazon walls
+// datacenter IPs, so a block says nothing about the listing), timeouts,
+// network errors, other statuses — is "unknown", and unknown NEVER
+// removes a link. This probe can therefore only catch listings that are
+// provably gone; it cannot prove a listing is in stock.
+
+export async function probeAmazonProductUrl(url) {
+  const asin = extractAmazonAsin(url);
+  if (!asin) return "unknown";
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3500);
+  try {
+    const r = await fetch(`https://www.amazon.com/dp/${asin}`, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+        Accept: "text/html",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: controller.signal,
+    });
+    if (r.status === 404 || r.status === 410) return "dead";
+    if (!r.ok) return "unknown";
+    const body = await r.text();
+    // Robot walls and interstitials are small and carry no product title;
+    // they prove nothing about the listing.
+    if (body.length < 20000 || !body.includes("productTitle")) return "unknown";
+    if (/couldn.t find that page/i.test(body)) return "dead";
+    if (/id="availability"[\s\S]{0,300}?Currently unavailable/i.test(body)) return "dead";
+    return "live";
+  } catch {
+    return "unknown"; // fail open — a probe failure never costs a link
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Runs the probe over a FRESH research result (main product + each
+// alternative) before it is cached or served, and nulls the Amazon link
+// of any listing the probe proved dead — tagResultAlternatives then
+// substitutes the tagged Amazon search link for that product's name, so
+// no card ever points at a provably dead listing. Mutates the result in
+// place; every failure mode leaves the result exactly as it was.
+export async function replaceDeadAmazonLinks(result) {
+  if (!result || typeof result !== "object") return result;
+  try {
+    const targets = [];
+    const consider = (holder) => {
+      if (!holder || typeof holder !== "object") return;
+      const candidate = [holder.amazon_url, holder.url].find(
+        (u) => typeof u === "string" && extractAmazonAsin(u)
+      );
+      if (candidate) targets.push({ holder, asin: extractAmazonAsin(candidate) });
+    };
+    if (typeof result.verdict_label === "string") consider(result);
+    if (Array.isArray(result.alternatives)) result.alternatives.forEach(consider);
+    if (targets.length === 0) return result;
+    const verdicts = await Promise.all(
+      targets.map((t) => probeAmazonProductUrl(`https://www.amazon.com/dp/${t.asin}`))
+    );
+    targets.forEach((t, i) => {
+      if (verdicts[i] !== "dead") return;
+      if (extractAmazonAsin(t.holder.amazon_url) === t.asin) t.holder.amazon_url = null;
+      if (extractAmazonAsin(t.holder.url) === t.asin) t.holder.url = null;
+    });
+  } catch {
+    // fail open — link hygiene must never break a verdict
+  }
+  return result;
 }
 
 // --- Load & failure hardening -------------------------------------------

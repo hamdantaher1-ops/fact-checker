@@ -40,7 +40,7 @@ const QUICK_VERDICT_TOOL = {
       },
       one_sentence_summary: {
         type: "string",
-        description: "Exactly one sentence a shopper can act on — the headline reason for the score.",
+        description: "Exactly one sentence of at most 24 words that a shopper can act on — the headline reason for the score.",
       },
     },
     required: ["verdict_label", "worth_it_score", "one_sentence_summary"],
@@ -60,7 +60,7 @@ const QUICK_FACTCHECK_TOOL = {
       },
       one_sentence_summary: {
         type: "string",
-        description: "Exactly one sentence stating what the evidence shows about the claim.",
+        description: "Exactly one sentence of at most 24 words stating what the evidence shows about the claim.",
       },
     },
     required: ["rating", "one_sentence_summary"],

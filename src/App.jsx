@@ -13,6 +13,9 @@ const RUST = "#A8431F";
 const GREEN = "#2F6B4F";
 const AMBER = "#B27A16";
 const SLATE = "#6B6459";
+const SUBJECT_BG = "#FBF8EF";
+const FINDINGS_BG = "#E4EAE1";
+const SOURCES_BG = "#E9DFC8";
 
 // Deeper-ink stamp palette ("Option B", Taher's final pick, Nov 6): dusty
 // versions of the verdict colors pressed one shade deeper, so the stamp
@@ -66,6 +69,30 @@ function stripFences(text) {
     .replace(/^```(json)?/i, "")
     .replace(/```$/, "")
     .trim();
+}
+
+// Display guardrails for a quick scan. The full research stays intact for
+// Ask the Jury; the page itself shows the shortest useful version, even
+// when a cached verdict was written before these limits existed.
+function compactText(value, maxWords = 40, maxSentences = 2) {
+  if (typeof value !== "string") return "";
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (!clean) return "";
+  const sentences = clean.match(/[^.!?]+[.!?]+["']?|[^.!?]+$/g) || [clean];
+  let text = sentences.slice(0, maxSentences).join(" ").trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length > maxWords) {
+    text = `${words.slice(0, maxWords).join(" ").replace(/[,;:]+$/, "")}…`;
+  }
+  return text;
+}
+
+function compactPoint(value, maxWords = 14) {
+  if (typeof value !== "string") return "";
+  const clean = value.replace(/\s+/g, " ").trim();
+  const words = clean.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return clean;
+  return `${words.slice(0, maxWords).join(" ").replace(/[,;:]+$/, "")}…`;
 }
 
 // Stages the whole flow moves through. Only one thing renders below the
@@ -347,53 +374,62 @@ export default function FactChecker() {
       : null;
 
   return (
-    <div style={{ background: PAPER, color: INK, minHeight: "100%", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }} className="w-full">
+    <div
+      style={{ background: PAPER, color: INK, minHeight: "100dvh", fontFamily: "'IBM Plex Mono', ui-monospace, monospace" }}
+      className="w-full max-w-full overflow-x-clip"
+    >
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,700&display=swap');
+        html, body, #root { width: 100%; max-width: 100%; overflow-x: clip; }
+        body { margin: 0; }
+        *, *::before, *::after { box-sizing: border-box; }
+        img, svg { max-width: 100%; }
         .fj-label { color: #6B6459; }
         .fj-sub { color: #6B6459; }
+        .fj-body-copy { font-size: 14px; line-height: 1.55; }
+        .fj-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+        .fj-zone { border: 1px solid #D9D4C6; padding: 16px; }
+        @media (min-width: 640px) { .fj-zone { padding: 24px; } }
       `}</style>
       <InkFilterDefs />
 
       {/* Masthead */}
-      <header className="border-b" style={{ borderColor: PAPER_LINE }}>
-        <div className="max-w-3xl mx-auto px-6 py-7 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <img src="/logo-mark.png" alt="Fact Jury logo" className="h-20 w-auto block" />
-            <div>
-            <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-3xl font-bold tracking-tight">
-              Fact Jury
-            </h1>
-            <p className="text-xs mt-1 opacity-70">Unbiased product reviews and fact-checks of what you see on social media.</p>
+      <header className="border-b w-full overflow-x-clip" style={{ borderColor: PAPER_LINE }}>
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 py-5 sm:py-7 flex items-center justify-between min-w-0">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <img src="/logo-mark.png" alt="Fact Jury logo" className="h-14 sm:h-20 w-auto block shrink-0" />
+            <div className="min-w-0">
+              <h1 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-2xl sm:text-3xl font-bold tracking-tight">
+                Fact Jury
+              </h1>
+              <p className="fj-body-copy mt-1 opacity-80">Unbiased product reviews and fact-checks of what you see on social media.</p>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-6 py-10 space-y-10">
+      <main className="w-full max-w-3xl mx-auto px-3 sm:px-6 py-6 sm:py-10 space-y-6 sm:space-y-8 overflow-x-clip">
         {/* The jury banner: animated deliberation, in session from the
             moment the page loads until the findings take over */}
         {stage !== "done" && stage !== "error" && (
-          <section style={{ background: PAPER }}>
+          <section className="w-full overflow-hidden border" style={{ background: PAPER, borderColor: PAPER_LINE }}>
             <img
               src="/jury/deliberation.gif"
               alt="The Fact Jury at work — taking notes and arguing over the evidence"
-              className="w-full block"
+              className="w-full max-w-full h-auto block"
             />
-            <div
-              className="flex flex-wrap justify-between gap-x-3 px-3 py-2"
-            >
+            <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 px-3 py-2 min-w-0">
               <span className="text-[11px] font-semibold tracking-widest">{JURY_CAPTIONS[stage][0]}</span>
-              <span className="text-[11px] opacity-70">{JURY_CAPTIONS[stage][1]}</span>
+              <span className="text-[11px] opacity-70 fj-wrap-anywhere">{JURY_CAPTIONS[stage][1]}</span>
             </div>
           </section>
         )}
 
         {/* Exhibit A: intake */}
-        <section>
+        <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: SUBJECT_BG }}>
           <SectionLabel index="A" title="The Subject" />
-          <div className="mt-4 space-y-3">
-            <div className="flex items-center gap-3">
+          <div className="mt-5 space-y-3 min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 min-w-0">
               <span className={`text-xs tracking-wide ${mode === "product" ? "font-semibold" : "opacity-60"}`}>
                 Product verdict
               </span>
@@ -417,39 +453,39 @@ export default function FactChecker() {
               </span>
             </div>
             {mode === "product" ? (
-              <p className="text-sm leading-relaxed opacity-80">
+              <p className="fj-body-copy opacity-90">
                 Paste an <strong>Instagram or Facebook ad link</strong>, or type a <strong>brand or product name</strong>,
                 and we'll tell you if it's worth your money or time. Or if you wanted, switch modes and we'll
                 fact-check the claim in any post.
               </p>
             ) : (
-              <p className="text-sm leading-relaxed opacity-80">
+              <p className="fj-body-copy opacity-90">
                 Paste a link to an <strong>Instagram or Facebook post</strong> where someone makes a claim — about an event, a
                 health tip, anything — or <strong>type the claim</strong> itself. We'll check it against reliable
                 sources and tell you if it's true.
               </p>
             )}
             <form
-              className="flex gap-2"
+              className="flex flex-col sm:flex-row gap-2 w-full min-w-0"
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSubmit();
               }}
             >
-              <div className="flex-1 flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
+              <div className="flex-1 min-w-0 w-full flex items-center border px-3" style={{ borderColor: INK, background: "#fff" }}>
                 <Search size={16} className="opacity-50 shrink-0" />
                 <input
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   maxLength={500}
                   disabled={busy}
-                  className="w-full bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
+                  className="w-full min-w-0 bg-transparent outline-none px-2 py-2.5 text-sm disabled:opacity-60"
                 />
               </div>
               <button
                 type="submit"
                 disabled={busy || !searchText.trim()}
-                className="px-4 flex items-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0"
+                className="px-4 py-2.5 sm:py-0 flex items-center justify-center gap-2 text-sm font-medium text-white disabled:opacity-60 shrink-0 w-full sm:w-auto"
                 style={{ background: INK }}
               >
                 {stage === "fetching" ? (
@@ -470,8 +506,8 @@ export default function FactChecker() {
 
             {/* Case facts: one line — sources, privacy, fairness */}
             <p
-              className="text-xs sm:text-[13px] leading-relaxed border px-3 py-2.5"
-              style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}
+              className="text-xs sm:text-[13px] leading-relaxed border px-3 py-2.5 w-full fj-wrap-anywhere"
+              style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.45)" }}
             >
               Every verdict cites its sources <span className="opacity-50">·</span> No account, nothing stored{" "}
               <span className="opacity-50">·</span> Claims and products judged, never people
@@ -489,9 +525,9 @@ export default function FactChecker() {
             findings own the page once research begins */}
         {stage === "idle" && (
           <>
-            <section>
+            <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: FINDINGS_BG }}>
               <SectionLabel index="B" title="What a Filing Looks Like" />
-              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
                 <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
                   <InkStamp color={STAMP_OCHRE} rotate="3deg" label="MIXED" />
                   <div className="w-full min-w-[132px]">
@@ -506,17 +542,16 @@ export default function FactChecker() {
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Reasoning</p>
-                    <p className="text-sm leading-relaxed">
-                      Great software, slippery pricing. “Free” filing excludes most filers — the FTC ordered Intuit
-                      to stop advertising it that way — and the paywalls tend to show up after you've typed in your
-                      whole return.
+                    <p className="fj-body-copy">
+                      Great software, slippery pricing. “Free” excludes most filers, and paywalls often appear
+                      after you've entered your whole return.
                     </p>
                   </div>
                   <p className="text-xs opacity-60">9 sources · FTC order, 2024 · State AG settlement · Consumer Reports · +6</p>
                 </div>
               </div>
 
-              <div className="mt-8 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="mt-7 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
                 <InkStamp color={STAMP_CLAY} rotate="4deg" label="MISLEADING" />
                 <div className="space-y-4">
                   <div>
@@ -525,9 +560,9 @@ export default function FactChecker() {
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">What the evidence shows</p>
-                    <p className="text-sm leading-relaxed">
-                      Your liver detoxes itself — no juice required. Celery juice is a fine drink, but there's no
-                      evidence it cleanses anything, and the posts selling it skip that part.
+                    <p className="fj-body-copy">
+                      Your liver detoxes itself. Celery juice is fine to drink, but no evidence shows it
+                      cleanses anything.
                     </p>
                   </div>
                   <p className="text-xs opacity-60">4 sources · NIH · Cleveland Clinic · Mayo Clinic · +1</p>
@@ -535,24 +570,19 @@ export default function FactChecker() {
               </div>
             </section>
 
-            <section>
+            <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: SOURCES_BG }}>
               <SectionLabel index="C" title="How We Check" />
-              <ol className="mt-3 text-sm leading-relaxed list-decimal list-inside space-y-1.5 opacity-90">
-                <li>We read the post, then research the open web — official records and reputable reporting first.</li>
-                <li>For health claims, we weigh the mainstream medical consensus, not whoever posted loudest.</li>
-                <li>An AI analyst weighs the evidence and files the verdict. Every claim in it links to a source you can open.</li>
+              <ol className="mt-4 fj-body-copy list-decimal list-inside space-y-1.5 opacity-90">
+                <li>We research the open web, starting with official records and reputable reporting.</li>
+                <li>Health claims are weighed against mainstream medical consensus.</li>
+                <li>Every verdict links to sources you can open and check.</li>
               </ol>
-              <div className="mt-5 border px-3 py-3" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.35)" }}>
+              <div className="mt-5 border px-3 py-3" style={{ borderColor: PAPER_LINE, background: "rgba(255,255,255,0.45)" }}>
                 <p className="text-xs font-semibold tracking-widest">WHY NOT JUST ASK AN AI CHAT?</p>
-                <p className="text-sm leading-relaxed mt-2">
-                  Fact Jury checks the product against real customer reviews online and gathers the most reliable
-                  facts before you buy. Only credible sources count as evidence: official records, regulators,
-                  independent testing, reputable reporting. Sponsored posts and brand marketing are claims to
-                  check, never proof. No brand can pay for a better verdict. An AI chat does none of this — it
-                  doesn't look anything up. It writes an answer from what it learned long ago, and when it doesn't
-                  know something, it can just make it up. It can repeat ads and opinions as if they were facts,
-                  and it sounds sure even when it's wrong. And it shows you no sources, so there's nothing you
-                  can check.
+                <p className="fj-body-copy mt-2">
+                  Fact Jury checks real customer reviews and reliable sources before you buy. Brand posts are
+                  claims, not proof, and no brand can pay for a better verdict. A general AI chat may answer
+                  from memory and show no sources.
                 </p>
               </div>
             </section>
@@ -561,25 +591,25 @@ export default function FactChecker() {
 
         {/* Exhibit B: fallback when the caption couldn't be auto-read */}
         {stage === "need-caption" && (
-          <section>
+          <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: SUBJECT_BG }}>
             <SectionLabel index="B" title="One More Thing" />
-            <div className="mt-4 space-y-3">
-              <p className="text-sm leading-relaxed">
+            <div className="mt-5 space-y-3 min-w-0">
+              <p className="fj-body-copy">
                 That post's text couldn't be read automatically — it happens on some posts, especially private or
                 friends-only ones. No problem, grab it yourself:
               </p>
               {mode === "factcheck" && (
-                <p className="text-sm leading-relaxed" style={{ color: RUST }}>
+                <p className="fj-body-copy" style={{ color: RUST }}>
                   Fact-checking a spoken claim? We can't hear the post's audio — if the claim was said out loud
                   rather than written in the caption, just type the claim itself in the box below instead.
                 </p>
               )}
-              <ol className="text-sm leading-relaxed list-decimal list-inside space-y-1 opacity-80">
+              <ol className="fj-body-copy list-decimal list-inside space-y-1 opacity-80">
                 <li>Open the post (link below).</li>
                 <li>Copy the caption text.</li>
                 <li>Paste it in the box and hit Continue.</li>
               </ol>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <a
                   href={/^https?:\/\//i.test(searchText.trim()) ? searchText.trim() : `https://${searchText.trim()}`}
                   target="_blank"
@@ -644,14 +674,14 @@ export default function FactChecker() {
             deliberation banner above stays up; the full findings
             replace this card when they land. */}
         {stage === "researching" && (quickVerdictMeta || quickFactMeta) && (
-          <section>
+          <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: FINDINGS_BG }}>
             <SectionLabel index="B" title="The Findings" />
             <p className="mt-3 text-[11px] font-semibold tracking-widest" style={{ color: RUST }}>
               PRELIMINARY VERDICT
             </p>
 
             {quickVerdictMeta && (
-              <div className="mt-3 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
                 <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
                   <InkStamp color={quickVerdictMeta.stamp} rotate={quickVerdictMeta.rotate} label={quickVerdictMeta.label} />
                 </div>
@@ -659,7 +689,7 @@ export default function FactChecker() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">First take</p>
-                    <p className="text-sm leading-relaxed">{quick.one_sentence_summary}</p>
+                    <p className="fj-body-copy">{compactText(quick.one_sentence_summary, 26, 1)}</p>
                   </div>
                   <p className="text-xs opacity-60 flex items-center gap-1.5">
                     <Loader2 size={12} className="animate-spin" /> Full findings on the way…
@@ -669,13 +699,13 @@ export default function FactChecker() {
             )}
 
             {quickFactMeta && (
-              <div className="mt-3 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
+              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
                 <InkStamp color={quickFactMeta.stamp} rotate={quickFactMeta.rotate} label={quickFactMeta.label} />
 
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs uppercase tracking-wide opacity-60 mb-1">First take</p>
-                    <p className="text-sm leading-relaxed">{quick.one_sentence_summary}</p>
+                    <p className="fj-body-copy">{compactText(quick.one_sentence_summary, 26, 1)}</p>
                   </div>
                   <p className="text-xs opacity-60 flex items-center gap-1.5">
                     <Loader2 size={12} className="animate-spin" /> Full findings on the way…
@@ -688,8 +718,8 @@ export default function FactChecker() {
 
         {/* Exhibit C: findings */}
         {stage === "done" && research && (verdictMeta || factMeta) && (
-          <section className="fj-findings">
-            <SectionLabel index={stage === "need-caption" ? "C" : "B"} title="The Findings" />
+          <section className="fj-findings fj-zone w-full min-w-0 overflow-x-clip" style={{ background: FINDINGS_BG }}>
+            <SectionLabel index="B" title="The Findings" />
 
             {prevPage && (
               <button
@@ -703,11 +733,11 @@ export default function FactChecker() {
             )}
 
             {juryMood && (
-              <figure className="mt-4 border-2" style={{ borderColor: INK, background: PAPER }}>
+              <figure className="mt-5 border-2 w-full overflow-hidden" style={{ borderColor: INK, background: PAPER }}>
                 <img
                   src={`/jury/reading-${juryMood}.gif`}
                   alt="The jury reads its verdict"
-                  className="w-full block"
+                  className="w-full max-w-full h-auto block"
                 />
                 <figcaption
                   className="px-3 py-2 border-t-2 text-[11px]"
@@ -726,10 +756,10 @@ export default function FactChecker() {
             )}
 
             {verdictMeta && (
-            <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-              <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
+            <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
+              <div className="flex flex-col items-center sm:items-start gap-3 shrink-0 w-full sm:w-auto">
                 <InkStamp color={verdictMeta.stamp} rotate={verdictMeta.rotate} label={verdictMeta.label} />
-                <div className="w-full min-w-[132px]">
+                <div className="w-full max-w-[190px] sm:max-w-none sm:min-w-[132px]">
                   <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">
                     Worth-it score — {research.worth_it_score}/10
                   </p>
@@ -737,9 +767,9 @@ export default function FactChecker() {
                 </div>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Product identified</p>
-                <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-xl font-semibold leading-snug">{research.product_name}</p>
+                <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-xl font-semibold leading-snug fj-wrap-anywhere">{research.product_name}</p>
                 {(() => {
                   const mainIsAmazon = (() => {
                     try {
@@ -789,28 +819,28 @@ export default function FactChecker() {
             )}
 
             {verdictMeta && (research?.pros?.length > 0 || research?.cons?.length > 0) && (
-              <div className="mt-8 grid sm:grid-cols-2 gap-6">
+              <div className="mt-7 grid sm:grid-cols-2 gap-5 min-w-0">
                 {research?.pros?.length > 0 && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Pros</p>
                     <ul className="space-y-2">
-                      {research.pros.map((point, i) => (
-                        <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
+                      {research.pros.slice(0, 3).map((point, i) => (
+                        <li key={i} className="fj-body-copy flex gap-2 min-w-0">
                           <span className="shrink-0 font-bold" style={{ color: GREEN }}>+</span>
-                          <span>{point}</span>
+                          <span className="min-w-0">{compactPoint(point, 14)}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
                 {research?.cons?.length > 0 && (
-                  <div>
+                  <div className="min-w-0">
                     <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Cons</p>
                     <ul className="space-y-2">
-                      {research.cons.map((point, i) => (
-                        <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
+                      {research.cons.slice(0, 3).map((point, i) => (
+                        <li key={i} className="fj-body-copy flex gap-2 min-w-0">
                           <span className="shrink-0 font-bold" style={{ color: RUST }}>−</span>
-                          <span>{point}</span>
+                          <span className="min-w-0">{compactPoint(point, 14)}</span>
                         </li>
                       ))}
                     </ul>
@@ -821,37 +851,39 @@ export default function FactChecker() {
 
             {verdictMeta && research?.summary && (
               <div className="mt-6">
-                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Reasoning</p>
-                <p className="text-[15px] leading-[1.65]">{research.summary}</p>
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Bottom line</p>
+                <p className="fj-body-copy">{compactText(research.summary, 40, 2)}</p>
               </div>
             )}
 
             {factMeta && (
-              <div className="mt-4 grid sm:grid-cols-[auto_1fr] gap-6 items-start">
-                <InkStamp color={factMeta.stamp} rotate={factMeta.rotate} label={factMeta.label} />
+              <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
+                <div className="flex justify-center sm:justify-start">
+                  <InkStamp color={factMeta.stamp} rotate={factMeta.rotate} label={factMeta.label} />
+                </div>
 
-                <div className="space-y-4">
+                <div className="space-y-4 min-w-0">
                   <div>
                     <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">The claim</p>
-                    <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-lg font-semibold leading-snug">&ldquo;{research.claim}&rdquo;</p>
+                    <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-lg font-semibold leading-snug fj-wrap-anywhere">&ldquo;{compactPoint(research.claim, 30)}&rdquo;</p>
                   </div>
 
                   <div>
-                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">What the evidence shows</p>
-                    <p className="text-[15px] leading-[1.65]">{research.summary}</p>
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Bottom line</p>
+                    <p className="fj-body-copy">{compactText(research.summary, 40, 2)}</p>
                   </div>
                 </div>
               </div>
             )}
 
             {factMeta && research?.evidence?.length > 0 && (
-              <div className="mt-8">
+              <div className="mt-7">
                 <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Key evidence</p>
                 <ul className="space-y-2">
-                  {research.evidence.map((point, i) => (
-                    <li key={i} className="text-[15px] leading-[1.65] flex gap-2">
+                  {research.evidence.slice(0, 3).map((point, i) => (
+                    <li key={i} className="fj-body-copy flex gap-2 min-w-0">
                       <ChevronRight size={14} className="shrink-0 mt-1 opacity-50" />
-                      <span>{point}</span>
+                      <span className="min-w-0">{compactPoint(point, 16)}</span>
                     </li>
                   ))}
                 </ul>
@@ -859,13 +891,13 @@ export default function FactChecker() {
             )}
 
             {research?.alternatives?.length > 0 && (
-              <div className="mt-8">
+              <div className="mt-7 min-w-0">
                 <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Worth comparing to</p>
                 <p className="fj-sub text-xs mb-3">
-                  The jury&rsquo;s rating sits under each name. At the bottom of every card are three links — buy it on Amazon, the maker&rsquo;s own site, or read its full Fact Jury verdict.
+                  Ratings sit under each name. Card links: Amazon · Maker&rsquo;s site · Fact Jury verdict.
                 </p>
                 <ul className="space-y-3">
-                  {research.alternatives.map((alt, i) => {
+                  {research.alternatives.slice(0, 3).map((alt, i) => {
                     const altMeta = alt.verdict_label ? VERDICTS[alt.verdict_label] : null;
                     const altIsAmazon = (() => {
                       try {
@@ -875,8 +907,8 @@ export default function FactChecker() {
                       }
                     })();
                     return (
-                    <li key={i} className="p-3 border" style={{ borderColor: PAPER_LINE, background: PAPER }}>
-                      <div className="flex gap-3">
+                    <li key={i} className="p-3 border w-full min-w-0 overflow-hidden" style={{ borderColor: PAPER_LINE, background: PAPER }}>
+                      <div className="flex gap-3 min-w-0">
                         {alt.image_url && (
                           <img
                             src={alt.image_url}
@@ -890,8 +922,8 @@ export default function FactChecker() {
                             style={{ borderColor: PAPER_LINE, background: "#fff" }}
                           />
                         )}
-                        <div className="min-w-0">
-                          <p className="text-[15px] font-semibold" style={{ color: INK, fontFamily: "'Source Serif 4', Georgia, serif" }}>
+                        <div className="min-w-0 flex-1">
+                          <p className="fj-body-copy font-semibold fj-wrap-anywhere" style={{ color: INK, fontFamily: "'Source Serif 4', Georgia, serif" }}>
                             {alt.name}
                           </p>
                           {altMeta && (
@@ -910,8 +942,9 @@ export default function FactChecker() {
                           {alt.price_text && (
                             <p className="text-xs font-medium mt-0.5">Approx. {alt.price_text}</p>
                           )}
-                          {alt.blurb && <p className="text-xs mt-0.5">{alt.blurb}</p>}
-                          {alt.reason && <p className="fj-sub text-xs mt-0.5">{alt.reason}</p>}
+                          {(alt.blurb || alt.reason) && (
+                            <p className="text-xs mt-0.5">{compactPoint(alt.blurb || alt.reason, 16)}</p>
+                          )}
                         </div>
                       </div>
                       <div
@@ -964,39 +997,42 @@ export default function FactChecker() {
               </div>
             )}
 
-            {research?.sources?.length > 0 && (
-              <div className="mt-8">
-                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Sources consulted</p>
-                <ul className="divide-y" style={{ borderColor: PAPER_LINE }}>
-                  {research.sources.map((s, i) => (
-                    <li key={i} className="py-3 flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <a
-                          href={s.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium hover:underline break-words"
-                          style={{ color: INK }}
-                        >
-                          {s.title}
-                        </a>
-                        {s.note && <p className="fj-sub text-xs mt-0.5">{s.note}</p>}
-                      </div>
-                      <ExternalLink size={14} className="opacity-40 mt-1 shrink-0" />
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {verdictMeta && (
               <JuryChat key={`${research.product_name}-${research.worth_it_score}`} verdict={research} />
             )}
           </section>
         )}
+
+        {stage === "done" && research?.sources?.length > 0 && (
+          <section className="fj-zone w-full min-w-0 overflow-x-clip" style={{ background: SOURCES_BG }}>
+            <SectionLabel index="C" title="Sources Consulted" />
+            <ul className="mt-4 divide-y" style={{ borderColor: PAPER_LINE }}>
+              {research.sources.slice(0, 6).map((s, i) => (
+                <li key={i} className="py-3 flex items-start justify-between gap-3 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="fj-body-copy font-medium hover:underline fj-wrap-anywhere"
+                      style={{ color: INK }}
+                    >
+                      {s.title}
+                    </a>
+                    {s.note && <p className="fj-sub text-xs mt-0.5">{compactPoint(s.note, 10)}</p>}
+                  </div>
+                  <ExternalLink size={14} className="opacity-40 mt-1 shrink-0" />
+                </li>
+              ))}
+            </ul>
+            {research.sources.length > 6 && (
+              <p className="fj-sub text-xs mt-2">Showing the six most useful sources from this check.</p>
+            )}
+          </section>
+        )}
       </main>
 
-      <footer className="max-w-3xl mx-auto px-6 pb-10 pt-4 text-[11px] opacity-50 leading-relaxed border-t" style={{ borderColor: PAPER_LINE }}>
+      <footer className="w-full max-w-3xl mx-auto px-4 sm:px-6 pb-10 pt-4 text-[11px] opacity-50 leading-relaxed border-t fj-wrap-anywhere" style={{ borderColor: PAPER_LINE }}>
         <Stamp size={12} className="inline mr-1 -mt-0.5" />
         Verdicts are generated from automated web research and are not professional or legal advice. Always use your
         own judgment before purchasing.{" "}
@@ -1010,14 +1046,14 @@ export default function FactChecker() {
 
 function SectionLabel({ index, title }) {
   return (
-    <div className="flex items-baseline gap-2">
+    <div className="flex items-center gap-3 min-w-0">
       <span
-        className="text-xs font-bold px-1.5 py-0.5 border"
-        style={{ borderColor: INK, color: INK }}
+        className="text-sm font-bold px-2 py-1 shrink-0"
+        style={{ background: INK, color: PAPER }}
       >
         {index}
       </span>
-      <h2 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-lg font-semibold">
+      <h2 style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-xl font-bold leading-tight">
         {title}
       </h2>
     </div>
@@ -1076,11 +1112,10 @@ function JuryChat({ verdict }) {
       {/* In the verdict, the chat is just a short invitation + button, so
           the page stays the same length no matter how long the
           conversation gets. The chat itself lives in the panel below. */}
-      <div className="mt-10 pt-8 border-t" style={{ borderColor: PAPER_LINE }}>
-        <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Ask the jury</p>
-        <p className="text-sm opacity-80 mb-4">
-          Questions about this verdict? Ask how it fits your needs — or whether a competitor beats it. Answers
-          come only from the research above; nothing new is looked up.
+      <div className="mt-7 border p-4" style={{ borderColor: PAPER_LINE, background: PAPER }}>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] opacity-70 mb-1">Ask the jury</p>
+        <p className="fj-body-copy opacity-90 mb-4">
+          Ask how this fits your needs, or whether a competitor beats it. Answers use only the findings above.
         </p>
         <button
           onClick={() => setOpen(true)}
@@ -1097,7 +1132,7 @@ function JuryChat({ verdict }) {
         <button
           onClick={() => setOpen(true)}
           aria-label="Open the Ask the Jury chat"
-          className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg"
+          className="fixed bottom-4 right-3 sm:right-4 z-40 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-medium shadow-lg max-w-[calc(100vw-24px)]"
           style={{ backgroundColor: INK, color: PAPER }}
         >
           <MessageCircle size={16} /> Ask the Jury
@@ -1117,7 +1152,7 @@ function JuryChat({ verdict }) {
           >
             <div className="min-w-0">
               <p className="text-xs uppercase tracking-wide opacity-60">Ask the jury</p>
-              <p className="text-sm font-medium truncate">{verdict.product_name}</p>
+              <p className="text-sm font-medium fj-wrap-anywhere">{verdict.product_name}</p>
             </div>
             <button
               onClick={() => setOpen(false)}
@@ -1189,7 +1224,7 @@ function JuryChat({ verdict }) {
 function InkStamp({ color, rotate, label }) {
   return (
     <div
-      className="px-4 py-2.5 text-center select-none shrink-0"
+      className="px-3 sm:px-4 py-2.5 text-center select-none shrink-0 max-w-full"
       style={{
         border: `3.2px solid ${color}`,
         color,
@@ -1198,7 +1233,7 @@ function InkStamp({ color, rotate, label }) {
         filter: "url(#inkRoughen)",
       }}
     >
-      <div className="text-xl font-bold tracking-[0.18em] leading-none">{label}</div>
+      <div className="text-lg sm:text-xl font-bold tracking-[0.14em] sm:tracking-[0.18em] leading-none whitespace-nowrap">{label}</div>
     </div>
   );
 }

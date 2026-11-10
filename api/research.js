@@ -29,6 +29,7 @@ import {
   writeCache,
   logUsage,
   tagResultAlternatives,
+  replaceDeadAmazonLinks,
   enrichAlternativeImages,
   callAnthropic,
   friendlyApiError,
@@ -54,7 +55,7 @@ const VERDICT_TOOL = {
       },
       amazon_url: {
         type: ["string", "null"],
-        description: "The Amazon product page for THIS product, from one dedicated Amazon search (the product name together with amazon.com). Null when no Amazon listing genuinely appeared — never guess one; the site adds its own Amazon search link in that case.",
+        description: "The Amazon product page for THIS product, from one dedicated Amazon search (the product name together with amazon.com), in canonical form https://www.amazon.com/dp/<ASIN>. Only record a listing that appears available to buy — a price or buying options in what you saw. If the listing shows 'Currently unavailable', no price, or looks discontinued, set null — never guess one; the site adds its own Amazon search link in that case.",
       },
       verdict_label: { type: "string", enum: ["Great Buy", "Decent", "Skip It", "Avoid"] },
       worth_it_score: {
@@ -63,16 +64,16 @@ const VERDICT_TOOL = {
       },
       summary: {
         type: "string",
-        description: "A SHORT verdict in plain language: at most 2 sentences and about 40 words. Verdict first, the single strongest reason, and any serious trust concern. Do NOT repeat the pros and cons — they have their own section below.",
+        description: "The bottom line in plain language: at most 2 sentences and 32 words. Verdict first, the single strongest reason, and any serious trust concern. Do NOT repeat the pros and cons — they have their own section below.",
       },
       pros: {
         type: "array",
-        description: "2-4 short bullet points FOR buying — concrete strengths backed by your research (review praise, ratings, value, guarantees). Each under ~12 words. Only real, sourced points; if there is genuinely nothing in its favour, return an empty array rather than inventing filler.",
+        description: "Up to 3 short bullet points FOR buying — concrete strengths backed by your research (review praise, ratings, value, guarantees). Each at most 10 words. Only real, sourced points; if there is genuinely nothing in its favour, return an empty array rather than inventing filler.",
         items: { type: "string" },
       },
       cons: {
         type: "array",
-        description: "2-4 short bullet points AGAINST buying — concrete weaknesses from your research (recurring complaints, poor value, missing independent reviews/coverage, trust or scam red flags). Each under ~12 words. Only real, sourced points; if there is genuinely nothing against it, return an empty array rather than inventing filler.",
+        description: "Up to 3 short bullet points AGAINST buying — concrete weaknesses from your research (recurring complaints, poor value, missing independent reviews/coverage, trust or scam red flags). Each at most 10 words. Only real, sourced points; if there is genuinely nothing against it, return an empty array rather than inventing filler.",
         items: { type: "string" },
       },
       alternatives: {
@@ -82,14 +83,14 @@ const VERDICT_TOOL = {
           type: "object",
           properties: {
             name: { type: "string" },
-            reason: { type: "string" },
+            reason: { type: "string", description: "One short reason this alternative is worth comparing, at most 10 words." },
             url: {
               type: "string",
               description: "A real link from your research to the maker's or store's own page for this alternative (NOT Amazon — the Amazon link goes in amazon_url). Prefer the product page where a shopper can buy it; a credible independent review is the fallback. Never invent a URL; if you have no real link for an alternative, leave that alternative out.",
             },
             amazon_url: {
               type: ["string", "null"],
-              description: "The Amazon product page URL for this alternative, ONLY if an Amazon listing for it actually appeared in your research — run a dedicated search for the product on Amazon to look for one. Set null when no Amazon listing appeared. Never construct, shorten, or guess an Amazon URL.",
+              description: "The Amazon product page URL for this alternative, ONLY if an Amazon listing for it actually appeared in your research — run a dedicated search for the product on Amazon to look for one — and appears available to buy (a price or buying options in what you saw; a 'Currently unavailable' or discontinued-looking listing counts as NO listing). Use the canonical form https://www.amazon.com/dp/<ASIN>. Set null when no live Amazon listing appeared. Never construct, shorten, or guess an Amazon URL.",
             },
             price_text: {
               type: ["string", "null"],
@@ -101,7 +102,7 @@ const VERDICT_TOOL = {
             },
             blurb: {
               type: "string",
-              description: "One short line (about 12 words max) on who this alternative suits best or its headline strength, e.g. 'The budget pick — nearly as good for half the price.'",
+              description: "One short line (10 words max) on who this alternative suits best or its headline strength, e.g. 'Budget pick — nearly as good, half the price.'",
             },
             verdict_label: {
               type: ["string", "null"],
@@ -118,13 +119,13 @@ const VERDICT_TOOL = {
       },
       sources: {
         type: "array",
-        description: "At least 3 sources when available.",
+        description: "3 to 5 of the most useful sources when available. Do not pad the list.",
         items: {
           type: "object",
           properties: {
             title: { type: "string" },
             url: { type: "string" },
-            note: { type: "string", description: "A few words on what this source shows, e.g. '4.8-star average across 2,000 reviews'." },
+            note: { type: "string", description: "At most 6 words on what this source shows, e.g. '4.8 stars across 2,000 reviews'." },
           },
           required: ["title", "url", "note"],
         },
@@ -140,7 +141,7 @@ const FACTCHECK_TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      claim: { type: "string", description: "The factual claim being checked, stated in one clear sentence." },
+      claim: { type: "string", description: "The factual claim being checked, stated in one clear sentence of at most 24 words." },
       rating: {
         type: "string",
         enum: ["True", "Mostly True", "Mixed", "Misleading", "False", "Can't Verify"],
@@ -148,22 +149,22 @@ const FACTCHECK_TOOL = {
       },
       summary: {
         type: "string",
-        description: "2-4 sentences explaining the rating in plain language, including any important context the claim leaves out.",
+        description: "Exactly 2 concise sentences, at most 40 words total: the rating first, then the decisive fact or missing context. Write it like the bottom line of a product verdict — no background that does not change the rating.",
       },
       evidence: {
         type: "array",
-        description: "2 to 5 short bullet points: the key facts the rating rests on.",
+        description: "Exactly 3 short bullet points: only the facts the rating rests on. Each at most 14 words.",
         items: { type: "string" },
       },
       sources: {
         type: "array",
-        description: "At least 3 sources when available.",
+        description: "3 to 5 of the most useful sources when available. Do not pad the list.",
         items: {
           type: "object",
           properties: {
             title: { type: "string" },
             url: { type: "string" },
-            note: { type: "string", description: "A few words on what this source shows, e.g. 'CDC data on vitamin D supplementation trials'." },
+            note: { type: "string", description: "At most 6 words on what this source shows, e.g. 'CDC vitamin D trial data'." },
           },
           required: ["title", "url", "note"],
         },
@@ -313,6 +314,7 @@ ${query.trim()}
    - False: contradicted by the evidence.
    - Can't Verify: no reliable evidence either way, or the statement is opinion or prediction rather than a checkable fact — say which in the summary.
 4. Judge the claim, never the person making it. Stick to what the evidence shows; where sources disagree, say so in the evidence.
+5. Write for a quick scan, like a product verdict: a two-sentence bottom line (40 words max) and exactly three evidence bullets (14 words max each). Leave out background that does not change the rating.
 
 Once your research is complete, call the submit_factcheck tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
   } else {
@@ -337,16 +339,16 @@ If the name is ambiguous, pick the most likely consumer product or brand and say
     prompt = `You are a consumer product research analyst. ${subject}
 
 1. Identify the specific product, brand, or service in question.
-2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing. Also record this product's own buy links: the maker's or store's product page in url (not Amazon), and — from one dedicated search for this product on Amazon — its Amazon product page in amazon_url when one genuinely appears, otherwise null; never invent either link.
-3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research to the maker's or store's own page for it — the product page where a shopper can buy it when your research surfaced one, otherwise a credible independent review of it — never an invented URL. ALSO, for each alternative, run one dedicated search for that product on Amazon (for example, search for the product name together with amazon.com) and, when an Amazon listing for it genuinely appears, record that Amazon product page separately in amazon_url; when none appears, set amazon_url to null rather than guessing one — the site adds its own Amazon search link in that case. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL). Also RATE each alternative the same way you rate the main product — a verdict label and a 0-10 worth-it score from the research you did on it, using the same score anchors and the same missing-evidence cap; give a null rating only when you found too little on it to judge honestly.
+2. Search the web for independent reviews, user ratings, common complaints, and any trust/scam red flags. Prioritize sources that are not the brand's own marketing. Also record this product's own buy links: the maker's or store's product page in url (not Amazon), and — from one dedicated search for this product on Amazon — its Amazon product page in amazon_url when one genuinely appears AND appears available to buy (a price or buying options in what you saw; a listing showing 'Currently unavailable', no price, or signs of being discontinued counts as no listing — set null), otherwise null; never invent either link. Give the Amazon page in canonical form, https://www.amazon.com/dp/<ASIN>.
+3. Also research whether there are well-regarded competing products or brands in the same category, and whether independent reviews suggest they're better value or better quality. For each alternative you name, include a real link from your research to the maker's or store's own page for it — the product page where a shopper can buy it when your research surfaced one, otherwise a credible independent review of it — never an invented URL. ALSO, for each alternative, run one dedicated search for that product on Amazon (for example, search for the product name together with amazon.com) and, when an Amazon listing for it genuinely appears and appears available to buy (same availability test as the main product — 'Currently unavailable' or discontinued-looking counts as no listing), record that Amazon product page separately in amazon_url in canonical /dp/<ASIN> form; when none appears, set amazon_url to null rather than guessing one — the site adds its own Amazon search link in that case. For each alternative also include: a one-line blurb on who it suits; its approximate price ONLY if a price actually appeared in a source you read (otherwise null — never guess a price); and a product image URL ONLY if one actually appeared in your search results (otherwise null — never construct an image URL). Also RATE each alternative the same way you rate the main product — a verdict label and a 0-10 worth-it score from the research you did on it, using the same score anchors and the same missing-evidence cap; give a null rating only when you found too little on it to judge honestly.
 4. Weigh all of this into an overall purchase verdict. This is about whether the product is actually worth buying and how it compares to alternatives — not only whether it's a scam.
 
 Score with worth_it_score using these anchors, and make the score agree with your verdict label: 9-10 excellent, strong independent praise (Great Buy); 7-8 good and well reviewed with only minor caveats (Great Buy); 5-6 genuinely mixed evidence (Decent); 3-4 weak — poor value, recurring complaints, or clearly better alternatives (Skip It); 0-2 nothing verifiable to recommend (Skip It, or Avoid when there are active scam or deception signals).
 Hard rule on missing evidence: if your research finds virtually no independent reviews, user ratings, or third-party coverage of the brand, the score cannot exceed 2. An invisible product is not a neutral product, and "no complaints found" about a brand nobody reviews is not a positive. Social media likes, follower counts, and the brand's own posts are marketing, not evidence, and never raise a score.
 
-Also distill your findings into pros and cons: 2-4 short bullets each, drawn only from what your research actually found. Pros are the concrete case for buying; cons are the concrete case against (including a missing review footprint when that's what you found). No generic filler on either side.
+Also distill your findings into pros and cons: up to 3 bullets each, at most 10 words per bullet, drawn only from what your research actually found. Pros are the concrete case for buying; cons are the concrete case against (including a missing review footprint when that's what you found). No generic filler on either side.
 
-Keep the summary SHORT: at most 2 sentences. The pros and cons carry the detail — the summary is just the headline reasoning, and it must not repeat them.
+Keep the summary to a bottom line: at most 2 sentences and 32 words. The pros and cons carry the detail, and the summary must not repeat them. Keep each alternative's reason and blurb to 10 words or fewer.
 
 Once your research is complete, call the submit_verdict tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
   }
@@ -366,6 +368,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     const toolUse = (data.content || []).find((b) => b.type === "tool_use" && b.name === toolName);
     if (toolUse) {
       await enrichAlternativeImages(toolUse.input);
+      await replaceDeadAmazonLinks(toolUse.input);
       await writeCache(cacheKey, toolUse.input);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
       res.status(200).json(tagResultAlternatives(toolUse.input));
@@ -383,6 +386,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     try {
       const parsedText = JSON.parse(stripFences(joined));
       await enrichAlternativeImages(parsedText);
+      await replaceDeadAmazonLinks(parsedText);
       await writeCache(cacheKey, parsedText);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
       res.status(200).json(tagResultAlternatives(parsedText));
@@ -393,6 +397,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
         try {
           const parsedMatch = JSON.parse(match[0]);
           await enrichAlternativeImages(parsedMatch);
+          await replaceDeadAmazonLinks(parsedMatch);
           await writeCache(cacheKey, parsedMatch);
           await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
           res.status(200).json(tagResultAlternatives(parsedMatch));

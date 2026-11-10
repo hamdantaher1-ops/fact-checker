@@ -21,6 +21,7 @@ import {
   friendlyApiError,
   tagAmazonUrl,
   amazonSearchUrl,
+  canonicalAmazonUrl,
   isAmazonUrl,
   amazonAssociateTag,
   isOwnerRequest,
@@ -63,11 +64,11 @@ function sanitizeVerdict(v) {
     // alternatives': store link tagged, and an Amazon link that falls
     // back to the store url when it IS Amazon, else the Amazon search
     // link for the product name — always carrying the affiliate tag.
-    url: tagAmazonUrl(str(v.url, 300)) || null,
+    url: tagAmazonUrl(canonicalAmazonUrl(str(v.url, 300))) || null,
     amazon_url: (() => {
       const given = str(v.amazon_url, 300);
-      if (given) return tagAmazonUrl(given);
-      const u = tagAmazonUrl(str(v.url, 300));
+      if (given) return tagAmazonUrl(canonicalAmazonUrl(given));
+      const u = tagAmazonUrl(canonicalAmazonUrl(str(v.url, 300)));
       if (isAmazonUrl(u)) return u;
       return tagAmazonUrl(amazonSearchUrl(str(v.product_name, 200)) || "") || null;
     })(),
@@ -82,14 +83,14 @@ function sanitizeVerdict(v) {
           // Tag here, server-side: whatever copy of the verdict the
           // client is holding, a recommended Amazon alternative leaves
           // this endpoint carrying Fact Jury's affiliate tag.
-          url: tagAmazonUrl(str(a?.url, 300)),
+          url: tagAmazonUrl(canonicalAmazonUrl(str(a?.url, 300))),
           // The card's dedicated Amazon link. Falls back the same way
           // the cards do: the store url when it IS Amazon, else the
           // Amazon search link for the product name.
           amazon_url: (() => {
             const given = str(a?.amazon_url, 300);
-            if (given) return tagAmazonUrl(given);
-            const u = tagAmazonUrl(str(a?.url, 300));
+            if (given) return tagAmazonUrl(canonicalAmazonUrl(given));
+            const u = tagAmazonUrl(canonicalAmazonUrl(str(a?.url, 300)));
             if (isAmazonUrl(u)) return u;
             return tagAmazonUrl(amazonSearchUrl(str(a?.name, 120)) || "") || null;
           })(),
