@@ -25,8 +25,8 @@ import {
   getClientIp,
   checkAndIncrementDailyCount,
   cacheKeyFor,
-  readCache,
-  writeCache,
+  readCachedVerdict,
+  writeCachedVerdict,
   logUsage,
   tagResultAlternatives,
   replaceDeadAmazonLinks,
@@ -220,8 +220,11 @@ export default async function handler(req, res) {
 
   // Cache first: a repeat check of the same product or claim is served
   // from the stored verdict — no daily quota consumed, no research re-run.
+  // The lookup tries every key this check could have been stored under
+  // (its own, the plain query key, the resolved-subject and word-order
+  // aliases written by earlier runs), not just this request's exact key.
   const cacheKey = cacheKeyFor(isFactCheck, caption, query, link);
-  const cached = await readCache(cacheKey);
+  const cached = await readCachedVerdict(isFactCheck, caption, query, link);
   if (cached) {
     await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, cached.verdict_label || cached.rating);
     res.status(200).json(tagResultAlternatives(cached));
@@ -369,7 +372,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     if (toolUse) {
       await enrichAlternativeImages(toolUse.input);
       await replaceDeadAmazonLinks(toolUse.input);
-      await writeCache(cacheKey, toolUse.input);
+      await writeCachedVerdict(cacheKey, isFactCheck, toolUse.input, query);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
       res.status(200).json(tagResultAlternatives(toolUse.input));
       return;
@@ -387,7 +390,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       const parsedText = JSON.parse(stripFences(joined));
       await enrichAlternativeImages(parsedText);
       await replaceDeadAmazonLinks(parsedText);
-      await writeCache(cacheKey, parsedText);
+      await writeCachedVerdict(cacheKey, isFactCheck, parsedText, query);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
       res.status(200).json(tagResultAlternatives(parsedText));
       return;
@@ -398,7 +401,7 @@ Once your research is complete, call the submit_verdict tool exactly once with y
           const parsedMatch = JSON.parse(match[0]);
           await enrichAlternativeImages(parsedMatch);
           await replaceDeadAmazonLinks(parsedMatch);
-          await writeCache(cacheKey, parsedMatch);
+          await writeCachedVerdict(cacheKey, isFactCheck, parsedMatch, query);
           await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
           res.status(200).json(tagResultAlternatives(parsedMatch));
           return;

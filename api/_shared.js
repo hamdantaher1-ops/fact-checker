@@ -104,6 +104,18 @@ export async function peekDailyCount(ip) {
 
 const CACHE_TTL_SECONDS = 604800; // 7 days
 
+// This number versions the SHAPE of a stored verdict — the fields the
+// readers (research, quick, chat) rely on — not the app release, the
+// prompts, the scoring wording, or the page design. It deliberately
+// stays at 7, the version the current live build writes, so verdicts
+// already in the cache remain reachable. Do NOT bump it for prompt,
+// copy, link-hygiene, or display changes: every bump makes every
+// existing key unreachable and silently flushes the whole cache (that
+// is how repeat checks kept re-running full research after unrelated
+// deploys). Bump it only if a stored field changes incompatibly.
+const CACHE_SCHEMA_VERSION = 7;
+const CACHE_KEY_PREFIX = `verdict-cache:v${CACHE_SCHEMA_VERSION}`;
+
 function normalizeLink(link) {
   try {
     const u = new URL(link.trim());
@@ -113,6 +125,29 @@ function normalizeLink(link) {
   } catch {
     return link.trim().toLowerCase();
   }
+}
+
+// Canonical subject text for cache keys: case, accents, whitespace and
+// punctuation all fold away, so "IM8 Welcome Kit", "im8  welcome-kit!"
+// and "IM8 — Welcome Kit" are the same check. (The previous typed-query
+// key folded only case and whitespace, so a stray hyphen, trademark
+// symbol or exclamation mark produced a different key and a full
+// re-research.)
+export function normalizeSubjectText(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/[™®©]/g, "") // NFKD would turn ™ into the letters "tm"
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cacheKeyFromBasis(isFactCheck, basis) {
+  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
+  return `${CACHE_KEY_PREFIX}:${isFactCheck ? "factcheck" : "product"}:${digest}`;
 }
 
 // The cache key decides what counts as "the same check". A check that came
@@ -126,20 +161,66 @@ export function cacheKeyFor(isFactCheck, caption, query, link) {
   if (typeof link === "string" && link.trim()) {
     basis = `link:${normalizeLink(link)}`;
   } else if (typeof caption === "string" && caption.trim()) {
-    const text = caption
+    // Belt-and-braces: drop an Instagram engagement wrapper if one ever
+    // reaches the key ("12,345 Likes, 678 Comments - user on Instagram: \"…\"")
+    const unwrapped = caption
       .trim()
-      .replace(/\s+/g, " ")
-      .toLowerCase()
-      // Belt-and-braces: drop an Instagram engagement wrapper if one ever
-      // reaches the key ("12,345 Likes, 678 Comments - user on Instagram: \"…\"")
       .replace(/^[\d,.]+\s+likes?,\s*[\d,.]+\s+comments?\s+-\s+.*?on instagram:\s*"/, "")
       .replace(/"$/, "");
-    basis = `caption:${text}`;
+    basis = `caption:${normalizeSubjectText(unwrapped)}`;
   } else {
-    basis = `query:${(query || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+    basis = `query:${normalizeSubjectText(query)}`;
   }
-  const digest = createHash("sha256").update(basis).digest("hex").slice(0, 32);
-  return `verdict-cache:v7:${isFactCheck ? "factcheck" : "product"}:${digest}`;
+  return cacheKeyFromBasis(isFactCheck, basis);
+}
+
+// The key a finished verdict is ALSO stored under, derived from the
+// subject the research actually resolved to (product_name for a product
+// verdict, claim for a fact-check). A shopper who first arrived via a
+// post link and later types the product's name — or who typed a loose
+// variant the research canonicalized — lands on this key, so the two
+// differently-worded checks converge on one saved verdict instead of
+// each paying for its own research.
+export function cacheKeyForResultSubject(isFactCheck, value) {
+  const subject = isFactCheck ? value?.claim : value?.product_name;
+  if (typeof subject !== "string" || !normalizeSubjectText(subject)) return null;
+  return cacheKeyFor(isFactCheck, null, subject, null);
+}
+
+// A word-order-insensitive key for product names/queries: the same
+// words in a different order ("Welcome Kit IM8" vs "IM8 Welcome Kit")
+// are the same product. Product-mode only — a claim's word order is
+// part of its meaning, so fact-checks never use this.
+export function cacheKeyForProductTokens(text) {
+  const normalized = normalizeSubjectText(text);
+  if (!normalized) return null;
+  const tokens = [...new Set(normalized.split(" "))].sort();
+  return cacheKeyFromBasis(false, `product-tokens:${tokens.join(" ")}`);
+}
+
+// Every key a repeat of this request might legitimately be stored
+// under: the request's own primary key, the plain query key (when the
+// primary came from a caption), and the word-order-insensitive product
+// key. Lookups try them in order.
+export function cacheLookupKeysFor(isFactCheck, caption, query, link) {
+  const keys = [cacheKeyFor(isFactCheck, caption, query, link)];
+  if (typeof query === "string" && query.trim()) {
+    const queryKey = cacheKeyFor(isFactCheck, null, query, null);
+    if (!keys.includes(queryKey)) keys.push(queryKey);
+    if (!isFactCheck) {
+      const tokenKey = cacheKeyForProductTokens(query);
+      if (tokenKey && !keys.includes(tokenKey)) keys.push(tokenKey);
+    }
+  }
+  return keys;
+}
+
+export async function readCachedVerdict(isFactCheck, caption, query, link) {
+  for (const key of cacheLookupKeysFor(isFactCheck, caption, query, link)) {
+    const hit = await readCache(key);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 export async function readCache(key) {
@@ -171,6 +252,26 @@ export async function writeCache(key, value) {
   } catch {
     // best-effort — a failed write only costs the next visitor a re-run
   }
+}
+
+// Stores a finished verdict under every key a repeat might look up:
+// the request's own primary key, the resolved-subject key (the
+// product_name / claim the research settled on), and — product mode
+// only — the word-order-insensitive key for both the shopper's wording
+// and the product name. This is the write half of the convergence the
+// lookup keys above read: however the same product is asked about the
+// second time, one of these keys matches.
+export async function writeCachedVerdict(primaryKey, isFactCheck, value, requestQuery) {
+  const keys = new Set([primaryKey]);
+  const subjectKey = cacheKeyForResultSubject(isFactCheck, value);
+  if (subjectKey) keys.add(subjectKey);
+  if (!isFactCheck) {
+    for (const text of [requestQuery, value?.product_name]) {
+      const tokenKey = cacheKeyForProductTokens(text);
+      if (tokenKey) keys.add(tokenKey);
+    }
+  }
+  await Promise.all([...keys].map((key) => writeCache(key, value)));
 }
 
 export async function logUsage(ip, isFactCheck, subjectText, cached, resultLabel) {

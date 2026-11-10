@@ -14,8 +14,11 @@ const GREEN = "#2F6B4F";
 const AMBER = "#B27A16";
 const SLATE = "#6B6459";
 const SUBJECT_BG = "#FBF8EF";
-const FINDINGS_BG = "#E4EAE1";
-const SOURCES_BG = "#E9DFC8";
+// Zone B (Taher, Nov 10): the pale sage was rejected — the journey now
+// runs in one warm paper family: A light, B a noticeably darker shade
+// of the same family, C back to the home paper tones.
+const FINDINGS_BG = "#D8CBAF";
+const SOURCES_BG = "#FBF8EF";
 
 // Deeper-ink stamp palette ("Option B", Taher's final pick, Nov 6): dusty
 // versions of the verdict colors pressed one shade deeper, so the stamp
@@ -1080,6 +1083,22 @@ function JuryChat({ verdict }) {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, sending, open]);
 
+  // While the chat takeover is open, the page behind it must not scroll,
+  // and Escape closes it like any other full-screen dialog.
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [open ]);
+
   async function send() {
     const q = input.trim();
     if (!q || sending || asked >= MAX_QUESTIONS) return;
@@ -1139,15 +1158,21 @@ function JuryChat({ verdict }) {
         </button>
       )}
 
-      {/* Chat panel: fixed size, its own scroll — the page behind it
-          doesn't move or grow. */}
+      {/* Chat takeover: opens over the WHOLE page (Taher, Nov 10 — the
+          old partial panel floating over the verdict was confusing to
+          type into). Full viewport, its own scroll, a clear Close
+          control; the conversation and behavior are unchanged. */}
       {open && (
         <div
-          className="fixed inset-x-3 bottom-3 z-50 flex flex-col border shadow-2xl sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[380px]"
-          style={{ backgroundColor: PAPER, borderColor: PAPER_LINE, maxHeight: "min(72vh, 580px)" }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Ask the Jury about ${verdict.product_name}`}
+          className="fixed inset-0 z-50 flex flex-col w-full overflow-hidden"
+          style={{ backgroundColor: PAPER }}
         >
+          <div className="w-full max-w-3xl mx-auto flex flex-col flex-1 min-h-0">
           <div
-            className="flex items-start justify-between gap-3 px-4 py-3 border-b shrink-0"
+            className="flex items-start justify-between gap-3 px-4 sm:px-6 py-3 border-b shrink-0"
             style={{ borderColor: PAPER_LINE }}
           >
             <div className="min-w-0">
@@ -1157,14 +1182,14 @@ function JuryChat({ verdict }) {
             <button
               onClick={() => setOpen(false)}
               aria-label="Close the chat"
-              className="p-1 opacity-60 hover:opacity-100 shrink-0"
-              style={{ color: INK }}
+              className="inline-flex items-center gap-1.5 border px-3 py-1.5 text-xs font-semibold shrink-0"
+              style={{ borderColor: INK, color: INK, background: "rgba(255,255,255,0.45)" }}
             >
-              <X size={16} />
+              <X size={15} /> Close
             </button>
           </div>
 
-          <div ref={listRef} className="overflow-y-auto px-4 py-3 space-y-4 flex-1">
+          <div ref={listRef} className="overflow-y-auto px-4 sm:px-6 py-3 space-y-4 flex-1 min-h-0">
             {messages.length === 0 && (
               <p className="text-sm opacity-70 leading-relaxed">
                 Ask anything about this verdict — whether it fits your needs, how it compares, or whether one of
@@ -1182,7 +1207,7 @@ function JuryChat({ verdict }) {
             {sending && <p className="text-sm opacity-60">The jury is conferring…</p>}
           </div>
 
-          <div className="px-4 pb-3 pt-2 border-t shrink-0" style={{ borderColor: PAPER_LINE }}>
+          <div className="px-4 sm:px-6 pb-4 pt-2 border-t shrink-0" style={{ borderColor: PAPER_LINE }}>
             {asked >= MAX_QUESTIONS ? (
               <p className="text-sm opacity-60 py-1">
                 That's the end of this chat — run a new check any time from the search bar.
@@ -1215,6 +1240,7 @@ function JuryChat({ verdict }) {
                 from qualifying purchases.
               </p>
             )}
+          </div>
           </div>
         </div>
       )}

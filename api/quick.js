@@ -20,8 +20,7 @@ import {
   stripFences,
   getClientIp,
   peekDailyCount,
-  cacheKeyFor,
-  readCache,
+  readCachedVerdict,
   callAnthropic,
   friendlyApiError,
   isOwnerRequest,
@@ -126,9 +125,11 @@ export default async function handler(req, res) {
   const ip = getClientIp(req);
 
   // Cache first, same as /api/research: derive the preliminary answer
-  // from the stored full verdict instead of calling the model.
-  const cacheKey = cacheKeyFor(isFactCheck, caption, query, link);
-  const cached = await readCache(cacheKey);
+  // from the stored full verdict instead of calling the model. Uses the
+  // same alias-aware lookup as /api/research, so a repeat the full
+  // endpoint would serve from cache never gets a fresh preliminary
+  // model call here either.
+  const cached = await readCachedVerdict(isFactCheck, caption, query, link);
   if (cached) {
     const derived = quickFromCached(cached, isFactCheck);
     if (derived) {
