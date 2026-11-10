@@ -224,7 +224,15 @@ export default async function handler(req, res) {
   // (its own, the plain query key, the resolved-subject and word-order
   // aliases written by earlier runs), not just this request's exact key.
   const cacheKey = cacheKeyFor(isFactCheck, caption, query, link);
-  const cached = await readCachedVerdict(isFactCheck, caption, query, link);
+  let cached = await readCachedVerdict(isFactCheck, caption, query, link);
+  if (!cached) {
+    // The cache read fails open: any transient Upstash error reads
+    // exactly like a genuine miss, and concluding "miss" here costs a
+    // full 45–115s re-research. One short-delay retry before giving up
+    // on the cache — a genuine first-time check pays only ~0.4s for it.
+    await new Promise((r) => setTimeout(r, 400));
+    cached = await readCachedVerdict(isFactCheck, caption, query, link);
+  }
   if (cached) {
     await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, cached.verdict_label || cached.rating);
     res.status(200).json(tagResultAlternatives(cached));
@@ -237,7 +245,9 @@ export default async function handler(req, res) {
   // never touch the daily quota or the global cap).
   let holdingLock = await acquireResearchLock(cacheKey);
   if (!holdingLock) {
-    const shared = await waitForCachedResult(cacheKey);
+    const shared = await waitForCachedResult(cacheKey, {
+      lookup: () => readCachedVerdict(isFactCheck, caption, query, link),
+    });
     if (shared) {
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, true, shared.verdict_label || shared.rating);
       res.status(200).json(tagResultAlternatives(shared));
@@ -372,8 +382,15 @@ Once your research is complete, call the submit_verdict tool exactly once with y
     if (toolUse) {
       await enrichAlternativeImages(toolUse.input);
       await replaceDeadAmazonLinks(toolUse.input);
-      await writeCachedVerdict(cacheKey, isFactCheck, toolUse.input, query);
+      await writeCachedVerdict(cacheKey, isFactCheck, toolUse.input, query, caption);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, toolUse.input.verdict_label || toolUse.input.rating);
+      // Release BEFORE responding: cleanup that runs only in the
+      // finally after the response can be cut short when the platform
+      // freezes the finished invocation, leaving the lock to its full
+      // 150s TTL and pushing the next identical check into the wait
+      // path. The finally below stays as a backstop (a repeat DEL of
+      // an absent key is harmless).
+      await releaseResearchLock(cacheKey);
       res.status(200).json(tagResultAlternatives(toolUse.input));
       return;
     }
@@ -390,8 +407,9 @@ Once your research is complete, call the submit_verdict tool exactly once with y
       const parsedText = JSON.parse(stripFences(joined));
       await enrichAlternativeImages(parsedText);
       await replaceDeadAmazonLinks(parsedText);
-      await writeCachedVerdict(cacheKey, isFactCheck, parsedText, query);
+      await writeCachedVerdict(cacheKey, isFactCheck, parsedText, query, caption);
       await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedText.verdict_label || parsedText.rating);
+      await releaseResearchLock(cacheKey);
       res.status(200).json(tagResultAlternatives(parsedText));
       return;
     } catch {
@@ -401,8 +419,9 @@ Once your research is complete, call the submit_verdict tool exactly once with y
           const parsedMatch = JSON.parse(match[0]);
           await enrichAlternativeImages(parsedMatch);
           await replaceDeadAmazonLinks(parsedMatch);
-          await writeCachedVerdict(cacheKey, isFactCheck, parsedMatch, query);
+          await writeCachedVerdict(cacheKey, isFactCheck, parsedMatch, query, caption);
           await logUsage(ip, isFactCheck, hasCaption ? caption : query, false, parsedMatch.verdict_label || parsedMatch.rating);
+          await releaseResearchLock(cacheKey);
           res.status(200).json(tagResultAlternatives(parsedMatch));
           return;
         } catch {

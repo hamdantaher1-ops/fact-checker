@@ -116,6 +116,14 @@ const CACHE_TTL_SECONDS = 604800; // 7 days
 const CACHE_SCHEMA_VERSION = 7;
 const CACHE_KEY_PREFIX = `verdict-cache:v${CACHE_SCHEMA_VERSION}`;
 
+// Prefixes written by earlier deployments (v3, v5, v6 — see the warning
+// above). Reads fall back to these so a version bump — which must never
+// happen for shape-compatible changes, but has repeatedly happened in
+// this project's history — no longer orphans every verdict the previous
+// build stored: a repeat check still finds the older copy instead of
+// paying for a full re-research. Writes always use the current prefix.
+const LEGACY_CACHE_KEY_PREFIXES = ["verdict-cache:v6", "verdict-cache:v5", "verdict-cache:v3"];
+
 function normalizeLink(link) {
   try {
     const u = new URL(link.trim());
@@ -200,8 +208,11 @@ export function cacheKeyForProductTokens(text) {
 
 // Every key a repeat of this request might legitimately be stored
 // under: the request's own primary key, the plain query key (when the
-// primary came from a caption), and the word-order-insensitive product
-// key. Lookups try them in order.
+// primary came from a caption), the caption key (when the primary came
+// from a link — the same post can be pasted in a different link form,
+// e.g. /reel/ instead of /p/, which changes the link key while the
+// caption, and its key, stay the same), and the word-order-insensitive
+// product key. Lookups try them in order.
 export function cacheLookupKeysFor(isFactCheck, caption, query, link) {
   const keys = [cacheKeyFor(isFactCheck, caption, query, link)];
   if (typeof query === "string" && query.trim()) {
@@ -212,13 +223,27 @@ export function cacheLookupKeysFor(isFactCheck, caption, query, link) {
       if (tokenKey && !keys.includes(tokenKey)) keys.push(tokenKey);
     }
   }
+  if (typeof link === "string" && link.trim() && typeof caption === "string" && caption.trim()) {
+    const captionKey = cacheKeyFor(isFactCheck, caption, null, null);
+    if (!keys.includes(captionKey)) keys.push(captionKey);
+  }
   return keys;
 }
 
 export async function readCachedVerdict(isFactCheck, caption, query, link) {
-  for (const key of cacheLookupKeysFor(isFactCheck, caption, query, link)) {
+  const keys = cacheLookupKeysFor(isFactCheck, caption, query, link);
+  for (const key of keys) {
     const hit = await readCache(key);
     if (hit) return hit;
+  }
+  // Legacy prefixes: the same lookup keys as written by earlier builds
+  // whose cache version differed. Every current-prefix key starts with
+  // CACHE_KEY_PREFIX, so the legacy form is a straight prefix swap.
+  for (const legacyPrefix of LEGACY_CACHE_KEY_PREFIXES) {
+    for (const key of keys) {
+      const hit = await readCache(key.replace(CACHE_KEY_PREFIX, legacyPrefix));
+      if (hit) return hit;
+    }
   }
   return null;
 }
@@ -256,15 +281,21 @@ export async function writeCache(key, value) {
 
 // Stores a finished verdict under every key a repeat might look up:
 // the request's own primary key, the resolved-subject key (the
-// product_name / claim the research settled on), and — product mode
-// only — the word-order-insensitive key for both the shopper's wording
-// and the product name. This is the write half of the convergence the
-// lookup keys above read: however the same product is asked about the
-// second time, one of these keys matches.
-export async function writeCachedVerdict(primaryKey, isFactCheck, value, requestQuery) {
+// product_name / claim the research settled on), the caption key when
+// the check came from a post (a repeat of the same post in a different
+// link form — /reel/ vs /p/ — changes the link key but not the caption
+// key), and — product mode only — the word-order-insensitive key for
+// both the shopper's wording and the product name. This is the write
+// half of the convergence the lookup keys above read: however the
+// same product is asked about the second time, one of these keys
+// matches.
+export async function writeCachedVerdict(primaryKey, isFactCheck, value, requestQuery, requestCaption) {
   const keys = new Set([primaryKey]);
   const subjectKey = cacheKeyForResultSubject(isFactCheck, value);
   if (subjectKey) keys.add(subjectKey);
+  if (typeof requestCaption === "string" && requestCaption.trim()) {
+    keys.add(cacheKeyFor(isFactCheck, requestCaption, null, null));
+  }
   if (!isFactCheck) {
     for (const text of [requestQuery, value?.product_name]) {
       const tokenKey = cacheKeyForProductTokens(text);
@@ -633,11 +664,17 @@ export async function releaseResearchLock(cacheKey) {
 }
 
 // Polls the result cache for a verdict another in-flight request is
-// producing. ~36s of patience, inside the function's own time budget.
-export async function waitForCachedResult(cacheKey, { tries = 12, intervalMs = 3000 } = {}) {
+// producing. A full research takes 45–115s, so patience has to cover
+// that (the old ~36s gave up long before the researcher finished and
+// the follower fell through to a 503 or a duplicate run). Polls every
+// key the verdict may land under — the researcher's write files it
+// under the primary key plus the resolved-subject and word-order
+// aliases, not just the primary — via the caller's lookup context when
+// provided.
+export async function waitForCachedResult(cacheKey, { tries = 40, intervalMs = 3000, lookup = null } = {}) {
   for (let i = 0; i < tries; i++) {
     await sleep(intervalMs);
-    const hit = await readCache(cacheKey);
+    const hit = lookup ? await lookup() : await readCache(cacheKey);
     if (hit) return hit;
   }
   return null;

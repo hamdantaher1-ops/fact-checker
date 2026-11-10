@@ -390,6 +390,7 @@ export default function FactChecker() {
         .fj-label { color: #6B6459; }
         .fj-sub { color: #6B6459; }
         .fj-body-copy { font-size: 14px; line-height: 1.55; }
+        input, textarea, select { font-size: 16px !important; }
         .fj-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
         .fj-zone { border: 1px solid #D9D4C6; padding: 16px; }
         @media (min-width: 640px) { .fj-zone { padding: 24px; } }
