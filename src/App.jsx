@@ -774,50 +774,6 @@ export default function FactChecker() {
               <div className="min-w-0">
                 <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">Product identified</p>
                 <p style={{ fontFamily: "'Source Serif 4', Georgia, serif" }} className="text-xl font-semibold leading-snug fj-wrap-anywhere">{research.product_name}</p>
-                {(() => {
-                  const mainIsAmazon = (() => {
-                    try {
-                      return !!research.url && /amazon\./i.test(new URL(research.url).hostname);
-                    } catch {
-                      return false;
-                    }
-                  })();
-                  if (!research.amazon_url && !research.url) return null;
-                  return (
-                    <>
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                        {research.amazon_url && (
-                          <a
-                            href={research.amazon_url}
-                            target="_blank"
-                            rel="sponsored noopener noreferrer"
-                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
-                            style={{ color: INK }}
-                          >
-                            Amazon <ExternalLink size={10} className="opacity-50 shrink-0" />
-                          </a>
-                        )}
-                        {research.url && !mainIsAmazon && (
-                          <a
-                            href={research.url}
-                            target="_blank"
-                            rel="sponsored noopener noreferrer"
-                            className="text-[11px] font-medium hover:underline inline-flex items-center gap-1"
-                            style={{ color: INK }}
-                          >
-                            Maker&rsquo;s site <ExternalLink size={10} className="opacity-50 shrink-0" />
-                          </a>
-                        )}
-                      </div>
-                      {!research?.alternatives?.length && research.amazon_associate && (
-                        <p className="fj-sub text-[11px] mt-2">
-                          Links may earn Fact Jury a commission at no cost to you. As an Amazon
-                          Associate, Fact Jury earns from qualifying purchases.
-                        </p>
-                      )}
-                    </>
-                  );
-                })()}
               </div>
             </div>
             )}
@@ -860,6 +816,55 @@ export default function FactChecker() {
               </div>
             )}
 
+            {verdictMeta && (research.amazon_url || research.url) && (
+              <div className="mt-6">
+                <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-1.5">See this product</p>
+                {(() => {
+                  const mainIsAmazon = (() => {
+                    try {
+                      return !!research.url && /amazon\./i.test(new URL(research.url).hostname);
+                    } catch {
+                      return false;
+                    }
+                  })();
+                  return (
+                    <>
+                      <div className="flex flex-wrap gap-x-5 gap-y-1">
+                        {research.amazon_url && (
+                          <a
+                            href={research.amazon_url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-xs font-medium hover:underline inline-flex items-center gap-1"
+                            style={{ color: INK }}
+                          >
+                            Amazon <ExternalLink size={11} className="opacity-50 shrink-0" />
+                          </a>
+                        )}
+                        {research.url && !mainIsAmazon && (
+                          <a
+                            href={research.url}
+                            target="_blank"
+                            rel="sponsored noopener noreferrer"
+                            className="text-xs font-medium hover:underline inline-flex items-center gap-1"
+                            style={{ color: INK }}
+                          >
+                            Maker&rsquo;s site <ExternalLink size={11} className="opacity-50 shrink-0" />
+                          </a>
+                        )}
+                      </div>
+                      {research.amazon_associate && research.amazon_url && (
+                        <p className="fj-sub text-[11px] mt-2">
+                          Links may earn Fact Jury a commission at no cost to you. As an Amazon
+                          Associate, Fact Jury earns from qualifying purchases.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
             {factMeta && (
               <div className="mt-5 grid sm:grid-cols-[auto_1fr] gap-5 items-start min-w-0">
                 <div className="flex justify-center sm:justify-start">
@@ -880,7 +885,38 @@ export default function FactChecker() {
               </div>
             )}
 
-            {factMeta && research?.evidence?.length > 0 && (
+            {factMeta && (research?.pros?.length > 0 || research?.cons?.length > 0) && (
+              <div className="mt-7 grid sm:grid-cols-2 gap-5 min-w-0">
+                {research?.pros?.length > 0 && (
+                  <div className="min-w-0">
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Pros</p>
+                    <ul className="space-y-2">
+                      {research.pros.slice(0, 3).map((point, i) => (
+                        <li key={i} className="fj-body-copy flex gap-2 min-w-0">
+                          <span className="shrink-0 font-bold" style={{ color: GREEN }}>+</span>
+                          <span className="min-w-0">{compactPoint(point, 14)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {research?.cons?.length > 0 && (
+                  <div className="min-w-0">
+                    <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Cons</p>
+                    <ul className="space-y-2">
+                      {research.cons.slice(0, 3).map((point, i) => (
+                        <li key={i} className="fj-body-copy flex gap-2 min-w-0">
+                          <span className="shrink-0 font-bold" style={{ color: RUST }}>−</span>
+                          <span className="min-w-0">{compactPoint(point, 14)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {factMeta && !(research?.pros?.length > 0 || research?.cons?.length > 0) && research?.evidence?.length > 0 && (
               <div className="mt-7">
                 <p className="fj-label text-[11px] font-semibold uppercase tracking-[0.14em] mb-2">Key evidence</p>
                 <ul className="space-y-2">

@@ -151,6 +151,16 @@ const FACTCHECK_TOOL = {
         type: "string",
         description: "Exactly 2 concise sentences, at most 40 words total: the rating first, then the decisive fact or missing context. Write it like the bottom line of a product verdict — no background that does not change the rating.",
       },
+      pros: {
+        type: "array",
+        description: "Up to 3 short bullet points SUPPORTING the claim — concrete evidence that backs it up (confirmed facts, official records, expert consensus in its favour). Each at most 10 words. Only real, sourced points; if there is genuinely nothing in its favour, return an empty array rather than inventing filler.",
+        items: { type: "string" },
+      },
+      cons: {
+        type: "array",
+        description: "Up to 3 short bullet points AGAINST the claim — concrete evidence that contradicts or undermines it (contradicting records, omitted context, no reliable evidence where proof was claimed). Each at most 10 words. Only real, sourced points; if there is genuinely nothing against it, return an empty array rather than inventing filler.",
+        items: { type: "string" },
+      },
       evidence: {
         type: "array",
         description: "Exactly 3 short bullet points: only the facts the rating rests on. Each at most 14 words.",
@@ -170,7 +180,7 @@ const FACTCHECK_TOOL = {
         },
       },
     },
-    required: ["claim", "rating", "summary", "evidence", "sources"],
+    required: ["claim", "rating", "summary", "pros", "cons", "evidence", "sources"],
   },
 };
 
@@ -328,6 +338,7 @@ ${query.trim()}
    - Can't Verify: no reliable evidence either way, or the statement is opinion or prediction rather than a checkable fact — say which in the summary.
 4. Judge the claim, never the person making it. Stick to what the evidence shows; where sources disagree, say so in the evidence.
 5. Write for a quick scan, like a product verdict: a two-sentence bottom line (40 words max) and exactly three evidence bullets (14 words max each). Leave out background that does not change the rating.
+6. Also distill your findings into pros and cons, exactly like a product verdict: up to 3 bullets each, at most 10 words per bullet, drawn only from what your research actually found. Pros are the concrete case FOR the claim — the evidence that supports it. Cons are the concrete case AGAINST it — contradicting evidence, key context the claim omits, or a missing evidence base when that is the finding. No generic filler on either side: if one side genuinely has nothing, return an empty array for that side. The summary must not repeat the pros and cons.
 
 Once your research is complete, call the submit_factcheck tool exactly once with your final findings. Do not write your answer as plain text — use the tool.`;
   } else {
